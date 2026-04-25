@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
+const { FieldValue } = require('firebase-admin/firestore');
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
 const Firebase = require('../utils/firebase');
@@ -11,7 +12,7 @@ module.exports = {
     async execute(message, args) {
         try {
             await Firebase.updateUser(message.author.id, {
-                lastActive: Firebase.db.FieldValue.serverTimestamp()
+                lastActive: FieldValue.serverTimestamp()
             });
 
             const embed = new EmbedBuilder()
