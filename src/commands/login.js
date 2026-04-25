@@ -1,75 +1,74 @@
 const { EmbedBuilder } = require('discord.js');
-const admin = require('firebase-admin'); // Thêm thư viện admin
+const { FieldValue } = require('firebase-admin/firestore');
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
 const Firebase = require('../utils/firebase');
+const AI = require('../ai');
 
 module.exports = {
-    name: 'login',
-    description: 'Đăng nhập',
+    name: 'ask',
+    description: 'Chat với AI',
+    usage: '.ask <câu hỏi>',
     cooldown: 5,
 
     async execute(message, args) {
-        if (message.channel.type !== 1 && !message.channel.isDMBased) {
-            const reply = await message.reply('📩 Vui lòng đăng nhập qua **DM**!');
-            setTimeout(() => reply.delete().catch(() => {}), 5000);
-            return;
-        }
-
         const userId = message.author.id;
 
         try {
             const user = await Firebase.getUser(userId);
             if (!user) {
-                return message.reply(`❌ Bạn chưa đăng ký! Gõ \`${Config.PREFIX}signup\` trước.`);
+                const reply = await message.reply(`❌ Bạn chưa đăng ký!\n📩 Vui lòng **DM** bot gõ \`${Config.PREFIX}signup\` để đăng ký.`);
+                setTimeout(() => reply.delete().catch(() => {}), 10000);
+                return;
             }
 
-            // Tạo biến serverTime để code gọn hơn
-            const serverTime = admin.firestore.FieldValue.serverTimestamp();
-
-            // Admin permanent login
-            if (Config.isOwner(userId)) {
-                await Firebase.updateUser(userId, {
-                    isLoggedIn: true,
-                    isPermanentAdmin: true,
-                    lastLogin: serverTime, // Đã sửa
-                    lastActive: serverTime, // Đã sửa
-                    notifiedExpiry: false
-                });
-
-                const embed = new EmbedBuilder()
-                    .setColor(0xFFD700)
-                    .setTitle('👑 Admin Login')
-                    .setDescription(`Chào mừng **Admin** ${message.author.tag}!\n🔓 Đăng nhập vĩnh viễn.`)
-                    .setTimestamp();
-
-                return message.reply({ embeds: [embed] });
+            if (!user.isLoggedIn && !Config.isOwner(userId)) {
+                const reply = await message.reply(`🔒 Bạn chưa đăng nhập!\n📩 DM bot gõ \`${Config.PREFIX}login\`.`);
+                setTimeout(() => reply.delete().catch(() => {}), 10000);
+                return;
             }
 
-            // Normal user
-            const sessionExpires = new Date();
-            sessionExpires.setDate(sessionExpires.getDate() + Config.SESSION_DAYS);
+            const isBanned = await Firebase.isBanned(userId);
+            if (isBanned) {
+                return message.reply('🚫 Bạn đã bị chặn. Dùng `.appeal` để kháng cáo.');
+            }
 
-            await Firebase.updateUser(userId, {
-                isLoggedIn: true,
-                lastLogin: serverTime, // Đã sửa
-                lastActive: serverTime, // Đã sửa
-                sessionExpires: admin.firestore.Timestamp.fromDate(sessionExpires), // Đã sửa lỗi ngầm
-                notifiedExpiry: false
+            if (!args.length) {
+                const reply = await message.reply(`Vui lòng nhập câu hỏi! Ví dụ: \`${Config.PREFIX}ask Chào Lol.AI!\``);
+                setTimeout(() => reply.delete().catch(() => {}), 5000);
+                return;
+            }
+
+            const question = args.join(' ');
+            const model = user.preferredModel || 'instant';
+
+            message.channel.sendTyping();
+
+            const response = await AI.ask(userId, question, model);
+
+            await Firebase.addHistory(userId, `user_${Date.now()}`, {
+                role: 'user',
+                content: question.slice(0, 100),
+                model: model
             });
 
-            const embed = new EmbedBuilder()
-                .setColor(0x00FF00)
-                .setTitle('🔓 Đăng nhập thành công!')
-                .setDescription(`Xin chào **${message.author.tag}**!\n\n⏰ Session hết hạn: ${sessionExpires.toLocaleString('vi-VN')}\n🔄 Gõ \`${Config.PREFIX}login\` để gia hạn.`)
-                .setTimestamp();
+            await Firebase.updateUser(userId, {
+                'stats.totalMessages': FieldValue.increment(1),
+                lastActive: FieldValue.serverTimestamp()
+            });
 
-            message.reply({ embeds: [embed] });
-            Logger.info(`Login: ${message.author.tag}`);
+            if (response.length > 1900) {
+                await message.reply(response.substring(0, 1900));
+                await message.channel.send(response.substring(1900));
+            } else {
+                await message.reply(response);
+            }
+
+            Logger.info(`Ask [${model}] by ${message.author.tag}`);
 
         } catch (error) {
-            Logger.error('Login error:', error);
-            message.reply('❌ Lỗi đăng nhập. Thử lại!');
+            Logger.error('Ask error:', error);
+            message.reply('❌ Có lỗi. Thử lại!');
         }
     }
 };
