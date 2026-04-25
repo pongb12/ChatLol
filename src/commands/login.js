@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
+const admin = require('firebase-admin'); // Thêm thư viện admin
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
 const Firebase = require('../utils/firebase');
@@ -23,13 +24,16 @@ module.exports = {
                 return message.reply(`❌ Bạn chưa đăng ký! Gõ \`${Config.PREFIX}signup\` trước.`);
             }
 
+            // Tạo biến serverTime để code gọn hơn
+            const serverTime = admin.firestore.FieldValue.serverTimestamp();
+
             // Admin permanent login
             if (Config.isOwner(userId)) {
                 await Firebase.updateUser(userId, {
                     isLoggedIn: true,
                     isPermanentAdmin: true,
-                    lastLogin: Firebase.db.FieldValue.serverTimestamp(),
-                    lastActive: Firebase.db.FieldValue.serverTimestamp(),
+                    lastLogin: serverTime, // Đã sửa
+                    lastActive: serverTime, // Đã sửa
                     notifiedExpiry: false
                 });
 
@@ -48,9 +52,9 @@ module.exports = {
 
             await Firebase.updateUser(userId, {
                 isLoggedIn: true,
-                lastLogin: Firebase.db.FieldValue.serverTimestamp(),
-                lastActive: Firebase.db.FieldValue.serverTimestamp(),
-                sessionExpires: Firebase.db.Timestamp.fromDate(sessionExpires),
+                lastLogin: serverTime, // Đã sửa
+                lastActive: serverTime, // Đã sửa
+                sessionExpires: admin.firestore.Timestamp.fromDate(sessionExpires), // Đã sửa lỗi ngầm
                 notifiedExpiry: false
             });
 
