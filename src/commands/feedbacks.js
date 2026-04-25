@@ -1,61 +1,43 @@
-const { EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
 
 module.exports = {
     name: 'feedbacks',
     description: 'Gửi phản hồi',
+    usage: '.feedbacks <tiêu đề> | <nội dung>',
     cooldown: 60,
 
     async execute(message, args) {
         try {
-            const modal = new ModalBuilder()
-                .setCustomId(`feedback_modal_${message.author.id}_${Date.now()}`)
-                .setTitle('📢 Gửi phản hồi');
+            if (!args.length) {
+                return message.reply(
+                    `📢 **Cách dùng:** \`${Config.PREFIX}feedbacks <tiêu đề> | <nội dung>\`\n` +
+                    `**Ví dụ:** \`${Config.PREFIX}feedbacks Đề xuất | Bot nên có tính năng dịch thuật\``
+                );
+            }
 
-            const titleInput = new TextInputBuilder()
-                .setCustomId('feedback_title')
-                .setLabel('Tiêu đề')
-                .setPlaceholder('Ví dụ: Đề xuất tính năng')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
-                .setMaxLength(100);
+            const full = args.join(' ');
+            const parts = full.split('|');
 
-            const contentInput = new TextInputBuilder()
-                .setCustomId('feedback_content')
-                .setLabel('Nội dung')
-                .setPlaceholder('Mô tả chi tiết...')
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(true)
-                .setMinLength(10)
-                .setMaxLength(1000);
+            if (parts.length < 2 || !parts[0].trim() || !parts[1].trim()) {
+                return message.reply(`❌ Thiếu tiêu đề hoặc nội dung!\n📌 Format: \`${Config.PREFIX}feedbacks <tiêu đề> | <nội dung>\``);
+            }
 
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(titleInput),
-                new ActionRowBuilder().addComponents(contentInput)
-            );
+            const title = parts[0].trim().slice(0, 100);
+            const content = parts.slice(1).join('|').trim().slice(0, 1000);
 
-            await message.showModal(modal);
+            if (content.length < 10) {
+                return message.reply('❌ Nội dung quá ngắn! Tối thiểu 10 ký tự.');
+            }
 
-        } catch (error) {
-            Logger.error('Feedback error:', error);
-            message.reply('❌ Không thể mở form. Thử lại!');
-        }
-    },
-
-    async handleModalSubmit(interaction) {
-        try {
-            const title = interaction.fields.getTextInputValue('feedback_title');
-            const content = interaction.fields.getTextInputValue('feedback_content');
-
-            // Send to owner
-            const owner = await interaction.client.users.fetch(Config.OWNER_ID).catch(() => null);
+            const owner = await message.client.users.fetch(Config.OWNER_ID).catch(() => null);
             if (owner) {
                 const embed = new EmbedBuilder()
                     .setColor(0xFFA500)
                     .setTitle('📢 Phản hồi mới')
                     .addFields(
-                        { name: '👤 User', value: `${interaction.user.tag} (${interaction.user.id})` },
+                        { name: '👤 User', value: `${message.author.tag} (${message.author.id})` },
                         { name: '📌 Tiêu đề', value: title },
                         { name: '📝 Nội dung', value: content }
                     )
@@ -64,12 +46,12 @@ module.exports = {
                 await owner.send({ embeds: [embed] }).catch(() => {});
             }
 
-            await interaction.reply({ content: '✅ Đã gửi phản hồi! Cảm ơn bạn.', ephemeral: true });
-            Logger.info(`Feedback from ${interaction.user.tag}`);
+            await message.reply('✅ Đã gửi phản hồi! Cảm ơn bạn.');
+            Logger.info(`Feedback from ${message.author.tag}: ${title}`);
 
         } catch (error) {
-            Logger.error('Feedback submit error:', error);
-            await interaction.reply({ content: '❌ Lỗi gửi phản hồi.', ephemeral: true }).catch(() => {});
+            Logger.error('Feedback error:', error);
+            message.reply('❌ Lỗi gửi phản hồi. Thử lại!');
         }
     }
 };
