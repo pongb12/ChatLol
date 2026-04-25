@@ -18,13 +18,19 @@ module.exports = {
                 const privateData = privateManager.getChat(message.author.id);
                 if (privateData && message.channel.id === privateData.channelId) {
                     privateManager.updateActivity(message.author.id);
-                    await botInstance.handlePrivateMessage(message);
+
+                    // FIX: prefix commands trong private chat vẫn phải được xử lý
+                    if (message.content.startsWith(Config.PREFIX)) {
+                        await botInstance.handleCommand(message);
+                    } else {
+                        await botInstance.handlePrivateMessage(message);
+                    }
                     return;
                 }
             }
 
-            // DM without command
-            if (message.channel.type === 1 || message.channel.isDMBased) {
+            // FIX: isDMBased() phải gọi như function
+            if (message.channel.type === 1 || message.channel.isDMBased()) {
                 if (!message.content.startsWith(Config.PREFIX)) return;
                 await botInstance.handleCommand(message);
                 return;
