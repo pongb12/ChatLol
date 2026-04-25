@@ -5,6 +5,7 @@ const Logger = require('./logger');
 class FirebaseManager {
     constructor() {
         this.db = null;
+        this.FieldValue = admin.firestore.FieldValue;
         this.init();
     }
 
