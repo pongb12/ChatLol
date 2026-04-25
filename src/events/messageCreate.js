@@ -12,14 +12,15 @@ module.exports = {
             const botInstance = message.client.botInstance;
             if (!botInstance) return;
 
-            // Check private chat
             const privateManager = botInstance.privateManager;
+
+            // Check private chat trước
             if (privateManager) {
                 const privateData = privateManager.getChat(message.author.id);
                 if (privateData && message.channel.id === privateData.channelId) {
                     privateManager.updateActivity(message.author.id);
 
-                    // FIX: prefix commands trong private chat vẫn phải được xử lý
+                    // Commands vẫn hoạt động trong private chat (endprv, v.v)
                     if (message.content.startsWith(Config.PREFIX)) {
                         await botInstance.handleCommand(message);
                     } else {
@@ -29,14 +30,14 @@ module.exports = {
                 }
             }
 
-            // FIX: isDMBased() phải gọi như function
+            // DM thường (không phải private chat)
             if (message.channel.type === 1 || message.channel.isDMBased()) {
                 if (!message.content.startsWith(Config.PREFIX)) return;
                 await botInstance.handleCommand(message);
                 return;
             }
 
-            // Guild commands
+            // Guild
             if (!message.content.startsWith(Config.PREFIX)) return;
             await botInstance.handleCommand(message);
 
