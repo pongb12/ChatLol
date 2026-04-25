@@ -2,6 +2,7 @@ const { EmbedBuilder } = require('discord.js');
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
 const Firebase = require('../utils/firebase');
+const admin = require('firebase-admin');
 
 module.exports = {
     name: 'signup',
