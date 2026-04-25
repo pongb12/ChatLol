@@ -57,7 +57,7 @@ class DiscordBot {
         // Ready
         this.client.once(Events.ClientReady, async () => {
             Logger.success(`✅ ${Config.BOT_NAME} v${Config.BOT_VERSION} online!`);
-            Logger.success(`Tag: ${Config.client?.user?.tag || 'Unknown'}`);
+            Logger.success(`Tag: ${this.client.user?.tag || 'Unknown'}`);
             Logger.success(`Servers: ${this.client.guilds.cache.size}`);
 
             try {
@@ -75,34 +75,6 @@ class DiscordBot {
             this.startQuotaReset();
         });
 
-        // Message
-        this.client.on(Events.MessageCreate, async (message) => {
-            if (message.author.bot) return;
-
-            // Check private chat
-            const privateData = this.privateManager.getChat(message.author.id);
-            if (privateData && message.channel.id === privateData.channelId) {
-                this.privateManager.updateActivity(message.author.id);
-                await this.handlePrivateMessage(message);
-                return;
-            }
-
-            // DM but not private chat
-            if (message.channel.type === 1 || message.channel.isDMBased) {
-                // Check if it's a command
-                if (message.content.startsWith(Config.PREFIX)) {
-                    await this.handleCommand(message);
-                    return;
-                }
-                // Not a command in DM - ignore or notify
-                return;
-            }
-
-            // Guild commands
-            if (!message.content.startsWith(Config.PREFIX)) return;
-            await this.handleCommand(message);
-        });
-
         // Interaction
         this.client.on(Events.InteractionCreate, async (interaction) => {
             await this.handleInteraction(interaction);
@@ -116,11 +88,13 @@ class DiscordBot {
         this.client.on(Events.Warn, (warning) => {
             Logger.warn('Discord warning:', warning);
         });
+
+        // NOTE: MessageCreate KHÔNG đăng ký ở đây
+        // Đã được handle hoàn toàn bởi events/messageCreate.js
     }
 
     /* ================= BACKGROUND TASKS ================= */
     startInactiveCheck() {
-        // Check inactive users every day
         setInterval(async () => {
             try {
                 const inactive = await Firebase.getInactiveUsers(Config.INACTIVE_CHECK_DAYS);
@@ -136,7 +110,6 @@ class DiscordBot {
 
                             await discordUser.send({ embeds: [embed] }).catch(() => {});
 
-                            // Schedule deletion after 1 day
                             setTimeout(async () => {
                                 const current = await Firebase.getUser(user.id);
                                 if (current) {
@@ -156,11 +129,10 @@ class DiscordBot {
             } catch (e) {
                 Logger.error('Inactive check failed:', e);
             }
-        }, 86400000); // Daily
+        }, 86400000);
     }
 
     startSessionAlert() {
-        // Check sessions expiring in 24h
         setInterval(async () => {
             try {
                 const users = await Firebase.db.collection('users')
@@ -169,7 +141,7 @@ class DiscordBot {
                     .get();
 
                 const now = Date.now();
-                const alertThreshold = now + 86400000; // 24h
+                const alertThreshold = now + 86400000;
 
                 for (const doc of users.docs) {
                     const user = doc.data();
@@ -189,20 +161,23 @@ class DiscordBot {
             } catch (e) {
                 Logger.error('Session alert error:', e);
             }
-        }, 3600000); // Hourly
+        }, 3600000);
     }
 
     startQuotaReset() {
-        // Reset quota at 0h UTC (7h VN)
         const now = new Date();
-        const nextReset = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), Config.RESET_HOUR_UTC, 0, 0);
-        if (nextReset <= now) nextReset.setDate(nextReset.getDate() + 1);
+        const nextReset = new Date(Date.UTC(
+            now.getUTCFullYear(),
+            now.getUTCMonth(),
+            now.getUTCDate(),
+            Config.RESET_HOUR_UTC, 0, 0
+        ));
+        if (nextReset <= now) nextReset.setUTCDate(nextReset.getUTCDate() + 1);
 
         const msUntilReset = nextReset - now;
 
         setTimeout(() => {
             Firebase.resetAllQuotas();
-            // Repeat daily
             setInterval(() => Firebase.resetAllQuotas(), 86400000);
         }, msUntilReset);
 
@@ -215,7 +190,7 @@ class DiscordBot {
             message.channel.sendTyping().catch(() => {});
 
             const ai = require('./ai');
-            // Private chat uses Instant model, no quota check, no history save
+            // Quota ĐƯỢC tính trong private chat (instant model)
             const response = await ai.process(message.author.id, message.content, 'instant', 'instant');
 
             await message.channel.send({ content: response }).catch(() => {});
@@ -232,7 +207,6 @@ class DiscordBot {
         const command = this.commands.get(commandName);
         if (!command) return;
 
-        // Cooldown
         if (!this.cooldowns.has(command.name)) {
             this.cooldowns.set(command.name, new Collection());
         }
@@ -253,7 +227,6 @@ class DiscordBot {
         timestamps.set(message.author.id, Date.now());
         setTimeout(() => timestamps.delete(message.author.id), cooldownAmount);
 
-        // Execute
         try {
             await command.execute(message, args, {
                 bot: this,
@@ -276,7 +249,6 @@ class DiscordBot {
             }
 
             if (interaction.isButton()) {
-                // Appeal buttons handled by collectors in commands
                 return;
             }
 
@@ -304,7 +276,7 @@ class DiscordBot {
     async stop() {
         Logger.info('Stopping bot...');
         this.privateManager.stopCleanup();
-        try { await this.client.destroy(); } catch(e) {}
+        try { await this.client.destroy(); } catch (e) {}
         Logger.success('Bot stopped');
     }
 }
