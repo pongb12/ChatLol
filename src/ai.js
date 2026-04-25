@@ -1,6 +1,7 @@
 const { Groq } = require('groq-sdk');
 const fs = require('fs');
 const path = require('path');
+const { FieldValue } = require('firebase-admin/firestore');
 
 const Config = require('./utils/config');
 const Logger = require('./utils/logger');
@@ -15,7 +16,7 @@ class AIHandler {
         this.rulesPath = path.join(__dirname, 'rules.json');
         this.rules = this.loadRules();
 
-        this.cooldowns = new Map(); // userId -> { instant: 0, thinking: 0 }
+        this.cooldowns = new Map();
 
         Logger.success('✅ AIHandler initialized');
     }
@@ -42,13 +43,11 @@ class AIHandler {
     }
 
     getRandomClient() {
-        // For Instant: random from pool 0-2 (3 keys)
         const idx = Math.floor(Math.random() * Math.min(3, this.clients.length));
         return this.clients[idx];
     }
 
     getThinkingClient() {
-        // For Thinking: use key 3 (4th key) or fallback to last
         return this.clients[Math.min(3, this.clients.length - 1)] || this.clients[0];
     }
 
@@ -75,24 +74,25 @@ class AIHandler {
         const user = await Firebase.getUser(userId);
         if (!user) return { allowed: false, reason: 'not_registered' };
 
-        // Admin bypass
         if (Config.isOwner(userId)) return { allowed: true, isAdmin: true };
 
         const quota = user.quota || {};
         const now = new Date();
 
-        // Check if need reset (new day UTC)
         const lastReset = quota[model]?.lastReset?.toDate?.() || new Date(0);
-        const isNewDay = now.getUTCDate() !== lastReset.getUTCDate() || 
+        const isNewDay = now.getUTCDate() !== lastReset.getUTCDate() ||
                         now.getUTCMonth() !== lastReset.getUTCMonth() ||
                         now.getUTCFullYear() !== lastReset.getUTCFullYear();
 
         if (isNewDay) {
             await Firebase.updateUser(userId, {
                 [`quota.${model}.dailyRequests`]: 0,
-                [`quota.${model}.lastReset`]: Firebase.db.FieldValue.serverTimestamp()
+                [`quota.${model}.lastReset`]: FieldValue.serverTimestamp()
             });
-            return { allowed: true, remaining: model === 'thinking' ? Config.THINKING_DAILY_LIMIT : Config.INSTANT_DAILY_LIMIT };
+            return {
+                allowed: true,
+                remaining: model === 'thinking' ? Config.THINKING_DAILY_LIMIT : Config.INSTANT_DAILY_LIMIT
+            };
         }
 
         const used = quota[model]?.dailyRequests || 0;
@@ -108,7 +108,7 @@ class AIHandler {
     async incrementQuota(userId, model) {
         if (Config.isOwner(userId)) return;
         await Firebase.updateUser(userId, {
-            [`quota.${model}.dailyRequests`]: Firebase.db.FieldValue.increment(1)
+            [`quota.${model}.dailyRequests`]: FieldValue.increment(1)
         });
     }
 
@@ -191,7 +191,7 @@ class AIHandler {
             const messages = this.buildMessages(question, model, context);
             const reply = await this.callAPI(messages, model);
 
-            // 6. Sanitize & save
+            // 6. Sanitize
             const safeReply = Firewall.sanitize(reply);
 
             // 7. Increment quota
@@ -205,14 +205,14 @@ class AIHandler {
                 question: question.slice(0, 100)
             });
 
-            Logger.success(`✅ ${model.toUpperCase()} (${Date.now() - start}ms) - ${userId.slice(0,6)}`);
+            Logger.success(`✅ ${model.toUpperCase()} (${Date.now() - start}ms) - ${userId.slice(0, 6)}`);
             return safeReply;
 
         } catch (err) {
             Logger.error('❌ AI Error:', err.message);
 
             if (err.status === 429) return '⚠️ Quá nhiều request. Thử lại sau 1 phút.';
-            if (err.status === 401) return '❌ API Key lỗi. Liên hệ admin.';
+            if (err.status === 401) return '❌ Quá tải truy cập. Liên hệ admin.';
             if (err.status >= 500) return '❌ Server AI lỗi. Thử lại sau.';
             if (err.message?.includes('timeout')) return '⏰ AI phản hồi chậm. Thử lại.';
 
