@@ -58,7 +58,7 @@ class PrivateChatManager {
             this.chats.set(user.id, data);
 
             await dmChannel.send({
-                content: `👋 **Xin chào ${user}!**\n\nĐây là không gian riêng tư với Lol.AI.\n🤖 Bạn có thể chat thoải mái ở đây.\n⏳ Kênh sẽ tự động đóng sau **1 giờ** không hoạt động.\n🚫 Gõ \`${Config.PREFIX}endprv\` để đóng ngay.\n\n💡 Lưu ý: Chat riêng tư **không được lưu** và không tính vào quota.`
+                content: `👋 **Xin chào ${user}!**\n\nĐây là không gian riêng tư với Lol.AI.\n🤖 Bạn có thể chat thoải mái ở đây.\n⏳ Kênh sẽ tự động đóng sau **1 giờ** không hoạt động.\n🚫 Gõ \`${Config.PREFIX}endprv\` để đóng ngay.\n\n💡 Lưu ý: Chat riêng tư **không được lưu**.`
             });
 
             Logger.success(`Created private DM for ${user.tag}`);
