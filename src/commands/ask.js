@@ -3,6 +3,7 @@ const Config = require('../utils/config');
 const Logger = require('../utils/logger');
 const Firebase = require('../utils/firebase');
 const AI = require('../ai');
+const admin = require('firebase-admin');
 
 module.exports = {
     name: 'ask',
@@ -58,7 +59,7 @@ module.exports = {
 
             // Update stats
             await Firebase.updateUser(userId, {
-                'stats.totalMessages': Firebase.db.FieldValue.increment(1),
+                'stats.totalMessages': admin.firestore.FieldValue.increment(1),
                 lastActive: Firebase.db.FieldValue.serverTimestamp()
             });
 
