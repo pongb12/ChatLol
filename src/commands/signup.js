@@ -1,8 +1,8 @@
 const { EmbedBuilder } = require('discord.js');
+const admin = require('firebase-admin'); // Thêm thư viện admin để dùng FieldValue
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
 const Firebase = require('../utils/firebase');
-const admin = require('firebase-admin');
 
 module.exports = {
     name: 'signup',
@@ -10,7 +10,7 @@ module.exports = {
     cooldown: 10,
 
     async execute(message, args) {
-        // Only in DM
+        // Chỉ cho phép đăng ký qua DM (Tin nhắn riêng)
         if (message.channel.type !== 1 && !message.channel.isDMBased) {
             const reply = await message.reply('📩 Vui lòng đăng ký qua **DM** để bảo mật!');
             setTimeout(() => reply.delete().catch(() => {}), 5000);
@@ -20,7 +20,7 @@ module.exports = {
         const userId = message.author.id;
 
         try {
-            // Check if already registered
+            // Kiểm tra xem user đã tồn tại chưa
             const existing = await Firebase.getUser(userId);
             if (existing) {
                 const embed = new EmbedBuilder()
@@ -31,14 +31,17 @@ module.exports = {
                 return message.reply({ embeds: [embed] });
             }
 
-            // Create user
+            // Chuẩn bị dữ liệu User mới
+            // Sử dụng admin.firestore.FieldValue.serverTimestamp() thay vì Firebase.db...
+            const serverTime = admin.firestore.FieldValue.serverTimestamp();
+
             const userData = {
                 discordId: userId,
                 idUsername: message.author.tag,
-                registeredAt: Firebase.db.FieldValue.serverTimestamp(),
-                lastLogin: Firebase.db.FieldValue.serverTimestamp(),
-                lastActive: Firebase.db.FieldValue.serverTimestamp(),
-                sessionExpires: Firebase.db.FieldValue.serverTimestamp(),
+                registeredAt: serverTime,
+                lastLogin: serverTime,
+                lastActive: serverTime,
+                sessionExpires: serverTime,
                 isLoggedIn: false,
                 isAdmin: Config.isOwner(userId),
                 isPermanentAdmin: Config.isOwner(userId),
@@ -47,12 +50,12 @@ module.exports = {
                 quota: {
                     instant: {
                         dailyRequests: 0,
-                        lastReset: Firebase.db.FieldValue.serverTimestamp(),
+                        lastReset: serverTime,
                         maxPerDay: Config.INSTANT_DAILY_LIMIT
                     },
                     thinking: {
                         dailyUses: 0,
-                        lastReset: Firebase.db.FieldValue.serverTimestamp(),
+                        lastReset: serverTime,
                         maxPerDay: Config.THINKING_DAILY_LIMIT
                     }
                 },
@@ -63,6 +66,7 @@ module.exports = {
                 }
             };
 
+            // Lưu vào Database
             await Firebase.createUser(userId, userData);
 
             const embed = new EmbedBuilder()
