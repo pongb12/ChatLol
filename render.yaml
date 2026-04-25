@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: lol-ai-bot-v2
+    env: node
+    region: singapore
+    plan: free
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PREFIX
+        value: "."
+      - key: INSTANT_MODEL
+        value: "llama-3.1-8b-instant"
+      - key: THINKING_MODEL
+        value: "openai/gpt-oss-120b"
+      - key: INSTANT_DAILY_LIMIT
+        value: "50"
+      - key: THINKING_DAILY_LIMIT
+        value: "3"
+      - key: INSTANT_COOLDOWN
+        value: "10"
+      - key: THINKING_COOLDOWN
+        value: "30"
+      - key: INSTANT_MAX_CHARS
+        value: "300"
+      - key: THINKING_MAX_CHARS
+        value: "200"
+      - key: SESSION_DAYS
+        value: "7"
+      - key: HISTORY_DAYS
+        value: "5"
+      - key: PRIVATE_CHAT_TIMEOUT
+        value: "3600000"
+      - key: INACTIVE_CHECK_DAYS
+        value: "7"
+      - key: DELETE_AFTER_DAYS
+        value: "1"
+      - key: RESET_HOUR_UTC
+        value: "0"
