@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const admin = require('firebase-admin'); // Thêm thư viện admin để dùng FieldValue
+const { FieldValue } = require('firebase-admin/firestore');
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
 const Firebase = require('../utils/firebase');
@@ -10,8 +10,7 @@ module.exports = {
     cooldown: 10,
 
     async execute(message, args) {
-        // Chỉ cho phép đăng ký qua DM (Tin nhắn riêng)
-        if (message.channel.type !== 1 && !message.channel.isDMBased) {
+        if (message.channel.type !== 1 && !message.channel.isDMBased()) {
             const reply = await message.reply('📩 Vui lòng đăng ký qua **DM** để bảo mật!');
             setTimeout(() => reply.delete().catch(() => {}), 5000);
             return;
@@ -20,7 +19,6 @@ module.exports = {
         const userId = message.author.id;
 
         try {
-            // Kiểm tra xem user đã tồn tại chưa
             const existing = await Firebase.getUser(userId);
             if (existing) {
                 const embed = new EmbedBuilder()
@@ -31,9 +29,7 @@ module.exports = {
                 return message.reply({ embeds: [embed] });
             }
 
-            // Chuẩn bị dữ liệu User mới
-            // Sử dụng admin.firestore.FieldValue.serverTimestamp() thay vì Firebase.db...
-            const serverTime = admin.firestore.FieldValue.serverTimestamp();
+            const serverTime = FieldValue.serverTimestamp();
 
             const userData = {
                 discordId: userId,
@@ -66,7 +62,6 @@ module.exports = {
                 }
             };
 
-            // Lưu vào Database
             await Firebase.createUser(userId, userData);
 
             const embed = new EmbedBuilder()
