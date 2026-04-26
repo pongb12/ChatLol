@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
+const { Timestamp } = require('firebase-admin/firestore');
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
 const Firebase = require('../utils/firebase');
@@ -31,7 +32,7 @@ module.exports = {
         }
 
         if (isNaN(timeValue) || timeValue <= 0) {
-            return message.reply('❌ Thở gian không hợp lệ!');
+            return message.reply('❌ Thời gian không hợp lệ!');
         }
 
         let duration = 0;
@@ -45,8 +46,7 @@ module.exports = {
             default: return message.reply('❌ Đơn vị: s/m/h/d');
         }
 
-        const maxDuration = 365 * 24 * 60 * 60 * 1000;
-        if (duration > maxDuration) {
+        if (duration > 365 * 24 * 60 * 60 * 1000) {
             return message.reply('❌ Tối đa 365 ngày!');
         }
 
@@ -56,7 +56,7 @@ module.exports = {
             await Firebase.banUser(targetId, {
                 bannedBy: message.author.id,
                 reason: `Manual ban by ${message.author.tag}`,
-                expiresAt: Firebase.db.Timestamp.fromDate(expiresAt),
+                expiresAt: Timestamp.fromDate(expiresAt),
                 isActive: true
             });
 
@@ -65,7 +65,7 @@ module.exports = {
                 .setTitle('🚫 ĐÃ BAN')
                 .addFields(
                     { name: '🆔 ID', value: targetId },
-                    { name: '⏳ Thở gian', value: display },
+                    { name: '⏳ Thời gian', value: display },
                     { name: '🕒 Hết hạn', value: expiresAt.toLocaleString('vi-VN') },
                     { name: '👮 Bởi', value: message.author.tag }
                 )
@@ -74,7 +74,6 @@ module.exports = {
             await message.reply({ embeds: [embed] });
             Logger.warn(`Ban: ${targetId} by ${message.author.tag} for ${display}`);
 
-            // Notify user
             const target = await message.client.users.fetch(targetId).catch(() => null);
             if (target) {
                 await target.send(`🚫 Bạn đã bị ban ${display}.\n📞 Liên hệ admin để kháng cáo.`).catch(() => {});
