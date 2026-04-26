@@ -11,6 +11,11 @@ module.exports = {
 
     async execute(message, args) {
         try {
+            const user = await Firebase.getUser(message.author.id);
+            if (!user) {
+                return message.reply(`❌ Bạn chưa đăng ký! Gõ \`${Config.PREFIX}signup\`.`);
+            }
+
             await Firebase.updateUser(message.author.id, {
                 lastActive: FieldValue.serverTimestamp()
             });
