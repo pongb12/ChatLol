@@ -65,7 +65,7 @@ module.exports = {
 
         const evidenceInput = new TextInputBuilder()
             .setCustomId('appeal_evidence')
-            .setLabel('Link bằng chứng (ảnh/video đầy đủ đoạn chat từ lúc bắt đầu)')
+            .setLabel('Link bằng chứng (ảnh/video đầy đủ đoạn chat)')
             .setPlaceholder('https://imgur.com/... hoặc https://youtu.be/...')
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
