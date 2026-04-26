@@ -67,7 +67,7 @@ module.exports = {
                 }
             });
 
-            if (message.channel.type !== 1 && !message.channel.isDMBased) {
+            if (message.channel.type !== 1 && !message.channel.isDMBased()) {
                 message.reply('📩 Kiểm tra DM để xác nhận xóa!');
             }
 
