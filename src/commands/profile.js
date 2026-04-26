@@ -49,7 +49,7 @@ module.exports = {
             await dmChannel.send({ embeds: [embed] });
 
             // Confirm in original channel
-            if (message.channel.type !== 1 && !message.channel.isDMBased) {
+            if (message.channel.type !== 1 && !message.channel.isDMBased()) {
                 const reply = await message.reply('📩 Đã gửi thông tin qua DM!');
                 setTimeout(() => reply.delete().catch(() => {}), 3000);
             }
