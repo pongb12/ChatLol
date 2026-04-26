@@ -264,20 +264,88 @@ class DiscordBot {
 
     async handleInteraction(interaction) {
         try {
+            // ===== MODAL SUBMIT =====
             if (interaction.isModalSubmit()) {
-                if (interaction.customId?.startsWith('feedback_modal_')) {
+                const customId = interaction.customId;
+
+                if (customId.startsWith('appeal_modal_')) {
+                    const cmd = this.commands.get('appeal');
+                    if (cmd?.handleModalSubmit) await cmd.handleModalSubmit(interaction);
+                    return;
+                }
+
+                if (customId.startsWith('feedback_modal_')) {
                     const cmd = this.commands.get('feedbacks');
                     if (cmd?.handleModalSubmit) await cmd.handleModalSubmit(interaction);
+                    return;
                 }
                 return;
             }
-            if (interaction.isButton()) return;
+
+            // ===== BUTTON =====
+            if (interaction.isButton()) {
+                const customId = interaction.customId;
+
+                // Mở form kháng cáo
+                if (customId.startsWith('appeal_open_')) {
+                    const requestUserId = customId.replace('appeal_open_', '');
+                    // Chỉ cho phép đúng người nhấn
+                    if (interaction.user.id !== requestUserId) {
+                        return interaction.reply({ content: '❌ Đây không phải form của bạn!', ephemeral: true });
+                    }
+                    const cmd = this.commands.get('appeal');
+                    if (cmd?.handleOpenButton) await cmd.handleOpenButton(interaction);
+                    return;
+                }
+
+                // Mở form phản hồi
+                if (customId.startsWith('feedback_open_')) {
+                    const requestUserId = customId.replace('feedback_open_', '');
+                    if (interaction.user.id !== requestUserId) {
+                        return interaction.reply({ content: '❌ Đây không phải form của bạn!', ephemeral: true });
+                    }
+                    const cmd = this.commands.get('feedbacks');
+                    if (cmd?.handleOpenButton) await cmd.handleOpenButton(interaction);
+                    return;
+                }
+
+                // Admin chấp nhận kháng cáo
+                if (customId.startsWith('approve_appeal_')) {
+                    if (!Config.isOwner(interaction.user.id)) {
+                        return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true });
+                    }
+                    const targetUserId = customId.replace('approve_appeal_', '');
+                    const cmd = this.commands.get('appeal');
+                    if (cmd?.handleApprove) await cmd.handleApprove(interaction, targetUserId);
+                    return;
+                }
+
+                // Admin từ chối kháng cáo
+                if (customId.startsWith('deny_appeal_')) {
+                    if (!Config.isOwner(interaction.user.id)) {
+                        return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true });
+                    }
+                    const targetUserId = customId.replace('deny_appeal_', '');
+                    const cmd = this.commands.get('appeal');
+                    if (cmd?.handleDeny) await cmd.handleDeny(interaction, targetUserId);
+                    return;
+                }
+
+                return;
+            }
+
+            // ===== SLASH COMMAND =====
             if (interaction.isChatInputCommand()) {
                 const cmd = this.commands.get(interaction.commandName);
                 if (cmd) await cmd.execute(interaction);
             }
+
         } catch (error) {
             Logger.error('Interaction error:', error);
+            // Tránh crash nếu interaction đã expired
+            if (interaction.isRepliable && !interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: '❌ Có lỗi xảy ra.', ephemeral: true }).catch(() => {});
+            }
         }
     }
 
