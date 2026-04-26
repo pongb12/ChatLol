@@ -1,3 +1,4 @@
+const { FieldValue } = require('firebase-admin/firestore');
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
 const Firebase = require('../utils/firebase');
@@ -32,8 +33,8 @@ module.exports = {
             const response = await AI.search(userId, query, model);
 
             await Firebase.updateUser(userId, {
-                'stats.totalMessages': Firebase.db.FieldValue.increment(1),
-                lastActive: Firebase.db.FieldValue.serverTimestamp()
+                'stats.totalMessages': FieldValue.increment(1),
+                lastActive: FieldValue.serverTimestamp()
             });
 
             await message.reply(response);
