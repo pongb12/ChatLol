@@ -33,10 +33,8 @@ class DiscordBot {
 
     loadCommands() {
         const commandsPath = path.join(__dirname, 'commands');
-
         try {
             const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
-
             for (const file of files) {
                 const cmd = require(path.join(commandsPath, file));
                 if ('name' in cmd && 'execute' in cmd) {
@@ -46,7 +44,6 @@ class DiscordBot {
                     Logger.warn(`Skip ${file}: missing name/execute`);
                 }
             }
-
             Logger.info(`Total commands: ${this.commands.size}`);
         } catch (error) {
             Logger.error('Load commands error:', error.message);
@@ -75,6 +72,40 @@ class DiscordBot {
             this.startQuotaReset();
         });
 
+        // MessageCreate — đặt trực tiếp ở đây, KHÔNG dùng events folder
+        this.client.on(Events.MessageCreate, async (message) => {
+            try {
+                if (message.author.bot) return;
+
+                // Check private chat trước
+                const privateData = this.privateManager.getChat(message.author.id);
+                if (privateData && message.channel.id === privateData.channelId) {
+                    this.privateManager.updateActivity(message.author.id);
+                    // Commands vẫn hoạt động trong private chat (endprv, v.v)
+                    if (message.content.startsWith(Config.PREFIX)) {
+                        await this.handleCommand(message);
+                    } else {
+                        await this.handlePrivateMessage(message);
+                    }
+                    return;
+                }
+
+                // DM thường
+                if (message.channel.type === 1 || message.channel.isDMBased()) {
+                    if (!message.content.startsWith(Config.PREFIX)) return;
+                    await this.handleCommand(message);
+                    return;
+                }
+
+                // Guild
+                if (!message.content.startsWith(Config.PREFIX)) return;
+                await this.handleCommand(message);
+
+            } catch (error) {
+                Logger.error('MessageCreate error:', error);
+            }
+        });
+
         // Interaction
         this.client.on(Events.InteractionCreate, async (interaction) => {
             await this.handleInteraction(interaction);
@@ -88,9 +119,6 @@ class DiscordBot {
         this.client.on(Events.Warn, (warning) => {
             Logger.warn('Discord warning:', warning);
         });
-
-        // NOTE: MessageCreate KHÔNG đăng ký ở đây
-        // Đã được handle hoàn toàn bởi events/messageCreate.js
     }
 
     /* ================= BACKGROUND TASKS ================= */
@@ -175,7 +203,6 @@ class DiscordBot {
         if (nextReset <= now) nextReset.setUTCDate(nextReset.getUTCDate() + 1);
 
         const msUntilReset = nextReset - now;
-
         setTimeout(() => {
             Firebase.resetAllQuotas();
             setInterval(() => Firebase.resetAllQuotas(), 86400000);
@@ -188,11 +215,8 @@ class DiscordBot {
     async handlePrivateMessage(message) {
         try {
             message.channel.sendTyping().catch(() => {});
-
             const ai = require('./ai');
-            // Quota ĐƯỢC tính trong private chat (instant model)
             const response = await ai.process(message.author.id, message.content, 'instant', 'instant');
-
             await message.channel.send({ content: response }).catch(() => {});
         } catch (error) {
             Logger.error('Private message error:', error);
@@ -247,11 +271,7 @@ class DiscordBot {
                 }
                 return;
             }
-
-            if (interaction.isButton()) {
-                return;
-            }
-
+            if (interaction.isButton()) return;
             if (interaction.isChatInputCommand()) {
                 const cmd = this.commands.get(interaction.commandName);
                 if (cmd) await cmd.execute(interaction);
