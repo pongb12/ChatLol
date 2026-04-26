@@ -10,7 +10,8 @@ const Firebase = require('./utils/firebase');
 
 class AIHandler {
     constructor() {
-        this.clients = [];
+        this.instantClients = [];
+        this.thinkingClients = [];
         this.initClients();
 
         this.rulesPath = path.join(__dirname, 'rules.json');
@@ -22,14 +23,23 @@ class AIHandler {
     }
 
     initClients() {
-        for (const key of Config.GROQ_API_KEYS) {
-            this.clients.push(new Groq({
-                apiKey: key,
-                timeout: 25000,
-                maxRetries: 2
-            }));
-        }
-        Logger.info(`🔑 Initialized ${this.clients.length} Groq clients`);
+        const allKeys = Config.GROQ_API_KEYS;
+
+        // Instant pool: key 1,2,3 (index 0,1,2)
+        this.instantClients = allKeys.slice(0, 3).map(key => new Groq({
+            apiKey: key,
+            timeout: 25000,
+            maxRetries: 2
+        }));
+
+        // Thinking pool: key 4,5 (index 3,4)
+        this.thinkingClients = allKeys.slice(3, 5).map(key => new Groq({
+            apiKey: key,
+            timeout: 25000,
+            maxRetries: 2
+        }));
+
+        Logger.info(`🔑 Instant pool: ${this.instantClients.length} keys | Thinking pool: ${this.thinkingClients.length} keys`);
     }
 
     loadRules() {
@@ -43,12 +53,24 @@ class AIHandler {
     }
 
     getRandomClient() {
-        const idx = Math.floor(Math.random() * Math.min(3, this.clients.length));
-        return this.clients[idx];
+        // Random trong instant pool (key 1,2,3)
+        const pool = this.instantClients;
+        if (!pool.length) {
+            Logger.warn('⚠️ Instant pool trống!');
+            return this.thinkingClients[0] || null;
+        }
+        return pool[Math.floor(Math.random() * pool.length)];
     }
 
     getThinkingClient() {
-        return this.clients[Math.min(3, this.clients.length - 1)] || this.clients[0];
+        // Random trong thinking pool (key 4,5)
+        const pool = this.thinkingClients;
+        if (!pool.length) {
+            // Fallback về instant pool nếu không có thinking keys
+            Logger.warn('⚠️ Thinking pool trống, fallback về Instant pool');
+            return this.getRandomClient();
+        }
+        return pool[Math.floor(Math.random() * pool.length)];
     }
 
     /* ================= COOLDOWN ================= */
@@ -212,7 +234,7 @@ class AIHandler {
             Logger.error('❌ AI Error:', err.message);
 
             if (err.status === 429) return '⚠️ Quá nhiều request. Thử lại sau 1 phút.';
-            if (err.status === 401) return '❌ Quá tải truy cập. Liên hệ admin.';
+            if (err.status === 401) return '❌ API Key lỗi. Liên hệ admin.';
             if (err.status >= 500) return '❌ Server AI lỗi. Thử lại sau.';
             if (err.message?.includes('timeout')) return '⏰ AI phản hồi chậm. Thử lại.';
 
