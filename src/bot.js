@@ -358,11 +358,14 @@ class DiscordBot {
 
         } catch (error) {
             Logger.error('Interaction error:', error);
+            // Chỉ reply nếu chưa có response nào — tránh gửi 2 lần
             try {
                 if (!interaction.replied && !interaction.deferred) {
                     await interaction.reply({ content: '❌ Có lỗi xảy ra.', ephemeral: true });
                 }
-            } catch (e) {}
+            } catch (e) {
+                // Interaction đã expired hoặc đã reply rồi — bỏ qua
+            }
         }
     }
 
