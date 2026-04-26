@@ -49,7 +49,7 @@ module.exports = {
         const nameInput = new TextInputBuilder()
             .setCustomId('appeal_name')
             .setLabel('Tên đơn kháng cáo')
-            .setPlaceholder('Ví dụ: Kháng cáo ban oan ngày 26/4/2026')
+            .setPlaceholder('Ví dụ: Kháng cáo ban oan ngày XX/XX/XXXX')
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
             .setMaxLength(100);
@@ -65,7 +65,7 @@ module.exports = {
 
         const evidenceInput = new TextInputBuilder()
             .setCustomId('appeal_evidence')
-            .setLabel('Link bằng chứng (ảnh/video đoạn chat)')
+            .setLabel('Link bằng chứng (ảnh/video đầy đủ đoạn chat từ lúc bắt đầu)')
             .setPlaceholder('https://imgur.com/... hoặc https://youtu.be/...')
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
@@ -81,46 +81,83 @@ module.exports = {
     },
 
     async handleModalSubmit(interaction) {
-        const userId = interaction.user.id;
-
         // Xử lý modal lý do từ chối (từ admin)
         if (interaction.customId.startsWith('appeal_deny_reason_')) {
-            const targetUserId = interaction.customId.replace('appeal_deny_reason_', '').split('_')[0];
-            const denyReason = interaction.fields.getTextInputValue('deny_reason');
+            const targetUserId = interaction.customId
+                .replace('appeal_deny_reason_', '')
+                .split('_')[0];
 
             try {
-                // Disable buttons trên tin nhắn gốc
-                const disabledRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('done')
-                        .setLabel('❌ Đã từ chối')
-                        .setStyle(ButtonStyle.Danger)
-                        .setDisabled(true)
-                );
-                await interaction.update({ components: [disabledRow] });
+                const denyReason = interaction.fields.getTextInputValue('deny_reason');
+                const isSkipped = denyReason.trim() === '-';
 
-                // Thông báo cho user kèm lý do
+                // Thông báo cho user
                 const targetUser = await interaction.client.users.fetch(targetUserId).catch(() => null);
                 if (targetUser) {
                     const embed = new EmbedBuilder()
                         .setColor(0xFF0000)
                         .setTitle('❌ Kháng cáo bị từ chối')
                         .setDescription('Đơn kháng cáo của bạn đã bị **từ chối**.')
-                        .addFields({ name: '📝 Lý do từ admin', value: denyReason })
                         .setFooter({ text: 'Nếu có thêm bằng chứng, gõ .appeal để gửi lại' })
                         .setTimestamp();
+
+                    if (!isSkipped) {
+                        embed.addFields({ name: '📝 Lý do từ admin', value: denyReason });
+                    }
 
                     await targetUser.send({ embeds: [embed] }).catch(() => {});
                 }
 
-                Logger.warn(`Appeal denied with reason: ${targetUserId} by ${interaction.user.tag} | ${denyReason}`);
+                // Disable buttons trên tin nhắn gốc — dùng channel.messages thay vì interaction.update()
+                try {
+                    const channel = interaction.channel;
+                    if (channel) {
+                        const messages = await channel.messages.fetch({ limit: 20 });
+                        const appealMsg = messages.find(m =>
+                            m.author.id === interaction.client.user.id &&
+                            m.components?.length > 0 &&
+                            m.components[0]?.components?.some(c =>
+                                c.customId === `deny_appeal_${targetUserId}` ||
+                                c.customId === `approve_appeal_${targetUserId}`
+                            )
+                        );
+
+                        if (appealMsg) {
+                            const disabledRow = new ActionRowBuilder().addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId('done_deny')
+                                    .setLabel('❌ Đã từ chối')
+                                    .setStyle(ButtonStyle.Danger)
+                                    .setDisabled(true)
+                            );
+                            await appealMsg.edit({ components: [disabledRow] }).catch(() => {});
+                        }
+                    }
+                } catch (e) {
+                    // Không disable được button thì bỏ qua, không crash
+                }
+
+                // Reply modal — KHÔNG dùng interaction.update() vì modal submit không hỗ trợ
+                await interaction.reply({
+                    content: isSkipped
+                        ? '✅ Đã từ chối kháng cáo (không kèm lý do).'
+                        : `✅ Đã từ chối và thông báo lý do cho user.`,
+                    ephemeral: true
+                });
+
+                Logger.warn(`Appeal denied: ${targetUserId} by ${interaction.user.tag}${isSkipped ? ' (no reason)' : ` | ${denyReason}`}`);
+
             } catch (error) {
                 Logger.error('Appeal deny reason error:', error);
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.reply({ content: '❌ Lỗi xử lý. Thử lại!', ephemeral: true }).catch(() => {});
+                }
             }
             return;
         }
 
         // Xử lý modal kháng cáo từ user
+        const userId = interaction.user.id;
         try {
             const isBanned = await Firebase.isBanned(userId);
             if (!isBanned) {
@@ -169,7 +206,9 @@ module.exports = {
 
         } catch (error) {
             Logger.error('Appeal modal submit error:', error);
-            await interaction.reply({ content: '❌ Lỗi gửi đơn. Thử lại!', ephemeral: true }).catch(() => {});
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: '❌ Lỗi gửi đơn. Thử lại!', ephemeral: true }).catch(() => {});
+            }
         }
     },
 
