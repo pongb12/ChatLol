@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
+const { FieldValue } = require('firebase-admin/firestore');
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
 const Firebase = require('../utils/firebase');
@@ -9,7 +10,7 @@ module.exports = {
     cooldown: 5,
 
     async execute(message, args) {
-        if (message.channel.type !== 1 && !message.channel.isDMBased) {
+        if (message.channel.type !== 1 && !message.channel.isDMBased()) {
             const reply = await message.reply('📩 Vui lòng dùng lệnh này trong **DM**!');
             setTimeout(() => reply.delete().catch(() => {}), 5000);
             return;
@@ -18,7 +19,7 @@ module.exports = {
         try {
             await Firebase.updateUser(message.author.id, {
                 isLoggedIn: false,
-                sessionExpires: Firebase.db.FieldValue.serverTimestamp()
+                sessionExpires: FieldValue.serverTimestamp()
             });
 
             const embed = new EmbedBuilder()
