@@ -32,7 +32,7 @@ class Config {
         this.FIREBASE_SERVICE_ACCOUNT = process.env.FIREBASE_SERVICE_ACCOUNT;
 
         // Limits
-        this.INSTANT_DAILY_LIMIT = parseInt(process.env.INSTANT_DAILY_LIMIT) || 50;
+        this.INSTANT_DAILY_LIMIT = parseInt(process.env.INSTANT_DAILY_LIMIT) || 15;
         this.THINKING_DAILY_LIMIT = parseInt(process.env.THINKING_DAILY_LIMIT) || 3;
         this.INSTANT_COOLDOWN = parseInt(process.env.INSTANT_COOLDOWN) || 10;
         this.THINKING_COOLDOWN = parseInt(process.env.THINKING_COOLDOWN) || 30;
