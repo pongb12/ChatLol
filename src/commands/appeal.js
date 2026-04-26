@@ -254,8 +254,8 @@ module.exports = {
 
             const reasonInput = new TextInputBuilder()
                 .setCustomId('deny_reason')
-                .setLabel('Lý do từ chối (có thể bỏ qua bằng cách nhập "-")')
-                .setPlaceholder('Ví dụ: Bằng chứng không hợp lệ, vi phạm rõ ràng...')
+                .setLabel('Lý do từ chối bỏ qua bằng "-")')
+                .setPlaceholder('Ví dụ: Bằng chứng không hợp lệ, ...')
                 .setStyle(TextInputStyle.Paragraph)
                 .setRequired(true)
                 .setMaxLength(500);
