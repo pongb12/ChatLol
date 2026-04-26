@@ -17,7 +17,6 @@ module.exports = {
                 return message.reply('ℹ️ Bạn không bị chặn.');
             }
 
-            // Gửi button để mở form — modal chỉ mở được từ interaction
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId(`appeal_open_${userId}`)
@@ -40,7 +39,6 @@ module.exports = {
         }
     },
 
-    // Xử lý button mở modal
     async handleOpenButton(interaction) {
         const userId = interaction.user.id;
 
@@ -82,10 +80,47 @@ module.exports = {
         await interaction.showModal(modal);
     },
 
-    // Xử lý submit modal
     async handleModalSubmit(interaction) {
         const userId = interaction.user.id;
 
+        // Xử lý modal lý do từ chối (từ admin)
+        if (interaction.customId.startsWith('appeal_deny_reason_')) {
+            const targetUserId = interaction.customId.replace('appeal_deny_reason_', '').split('_')[0];
+            const denyReason = interaction.fields.getTextInputValue('deny_reason');
+
+            try {
+                // Disable buttons trên tin nhắn gốc
+                const disabledRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('done')
+                        .setLabel('❌ Đã từ chối')
+                        .setStyle(ButtonStyle.Danger)
+                        .setDisabled(true)
+                );
+                await interaction.update({ components: [disabledRow] });
+
+                // Thông báo cho user kèm lý do
+                const targetUser = await interaction.client.users.fetch(targetUserId).catch(() => null);
+                if (targetUser) {
+                    const embed = new EmbedBuilder()
+                        .setColor(0xFF0000)
+                        .setTitle('❌ Kháng cáo bị từ chối')
+                        .setDescription('Đơn kháng cáo của bạn đã bị **từ chối**.')
+                        .addFields({ name: '📝 Lý do từ admin', value: denyReason })
+                        .setFooter({ text: 'Nếu có thêm bằng chứng, gõ .appeal để gửi lại' })
+                        .setTimestamp();
+
+                    await targetUser.send({ embeds: [embed] }).catch(() => {});
+                }
+
+                Logger.warn(`Appeal denied with reason: ${targetUserId} by ${interaction.user.tag} | ${denyReason}`);
+            } catch (error) {
+                Logger.error('Appeal deny reason error:', error);
+            }
+            return;
+        }
+
+        // Xử lý modal kháng cáo từ user
         try {
             const isBanned = await Firebase.isBanned(userId);
             if (!isBanned) {
@@ -138,12 +173,10 @@ module.exports = {
         }
     },
 
-    // Xử lý admin approve
     async handleApprove(interaction, targetUserId) {
         try {
             await Firebase.unbanUser(targetUserId);
 
-            // Disable buttons sau khi xử lý
             const disabledRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('done')
@@ -154,7 +187,6 @@ module.exports = {
 
             await interaction.update({ components: [disabledRow] });
 
-            // Thông báo cho user
             const targetUser = await interaction.client.users.fetch(targetUserId).catch(() => null);
             if (targetUser) {
                 const embed = new EmbedBuilder()
@@ -174,33 +206,26 @@ module.exports = {
         }
     },
 
-    // Xử lý admin deny
     async handleDeny(interaction, targetUserId) {
         try {
-            // Disable buttons sau khi xử lý
-            const disabledRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('done')
-                    .setLabel('❌ Đã từ chối')
-                    .setStyle(ButtonStyle.Danger)
-                    .setDisabled(true)
+            // Mở modal nhập lý do — có thể bỏ qua bằng cách đóng modal
+            const modal = new ModalBuilder()
+                .setCustomId(`appeal_deny_reason_${targetUserId}_${Date.now()}`)
+                .setTitle('❌ Lý do từ chối');
+
+            const reasonInput = new TextInputBuilder()
+                .setCustomId('deny_reason')
+                .setLabel('Lý do từ chối (có thể bỏ qua bằng cách nhập "-")')
+                .setPlaceholder('Ví dụ: Bằng chứng không hợp lệ, vi phạm rõ ràng...')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true)
+                .setMaxLength(500);
+
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(reasonInput)
             );
 
-            await interaction.update({ components: [disabledRow] });
-
-            // Thông báo cho user
-            const targetUser = await interaction.client.users.fetch(targetUserId).catch(() => null);
-            if (targetUser) {
-                const embed = new EmbedBuilder()
-                    .setColor(0xFF0000)
-                    .setTitle('❌ Kháng cáo bị từ chối')
-                    .setDescription('Đơn kháng cáo của bạn đã bị **từ chối**.\nNếu có thêm bằng chứng, gõ `.appeal` để gửi lại.')
-                    .setTimestamp();
-
-                await targetUser.send({ embeds: [embed] }).catch(() => {});
-            }
-
-            Logger.warn(`Appeal denied: ${targetUserId} by ${interaction.user.tag}`);
+            await interaction.showModal(modal);
 
         } catch (error) {
             Logger.error('Appeal deny error:', error);
