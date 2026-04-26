@@ -13,12 +13,14 @@ class Config {
         this.OWNER_ID = process.env.OWNER_ID || '';
         this.PREFIX = process.env.PREFIX || '.';
 
-        // Groq API Keys (4 keys for pool)
+        // Groq API Keys
+        // Instant pool: key 1,2,3 | Thinking pool: key 4,5
         this.GROQ_API_KEYS = [
             process.env.GROQ_API_KEY_1,
             process.env.GROQ_API_KEY_2,
             process.env.GROQ_API_KEY_3,
-            process.env.GROQ_API_KEY_4
+            process.env.GROQ_API_KEY_4,
+            process.env.GROQ_API_KEY_5
         ].filter(Boolean);
 
         // Models
@@ -68,20 +70,31 @@ class Config {
             if (this.NODE_ENV === 'production') process.exit(1);
         }
 
+        // Cảnh báo nếu không đủ key cho từng pool
+        if (this.GROQ_API_KEYS.length < 3) {
+            Logger.warn(`⚠️ Instant pool cần 3 keys (key 1,2,3), hiện có ${Math.min(this.GROQ_API_KEYS.length, 3)}`);
+        }
+        if (this.GROQ_API_KEYS.length < 4) {
+            Logger.warn('⚠️ Thinking pool cần key 4,5 — sẽ fallback về Instant pool');
+        }
+
         if (!/^\d{17,20}$/.test(this.OWNER_ID)) {
             Logger.warn(`⚠️ OWNER_ID không hợp lệ: ${this.OWNER_ID}`);
         }
     }
 
     printConfig() {
+        const instantKeys = Math.min(this.GROQ_API_KEYS.length, 3);
+        const thinkingKeys = Math.max(this.GROQ_API_KEYS.length - 3, 0);
+
         Logger.success(`${this.BOT_NAME} v${this.BOT_VERSION}`);
         Logger.info('='.repeat(50));
         Logger.info(`🎮 Env: ${this.NODE_ENV}`);
         Logger.info(`🤖 Prefix: "${this.PREFIX}"`);
-        Logger.info(`🧠 Instant: ${this.INSTANT_MODEL}`);
-        Logger.info(`🧠 Thinking: ${this.THINKING_MODEL}`);
+        Logger.info(`⚡ Instant model: ${this.INSTANT_MODEL}`);
+        Logger.info(`🧠 Thinking model: ${this.THINKING_MODEL}`);
         Logger.info(`👑 Owner: ${this.OWNER_ID}`);
-        Logger.info(`🔑 API Keys: ${this.GROQ_API_KEYS.length}`);
+        Logger.info(`🔑 Instant pool: ${instantKeys} keys | Thinking pool: ${thinkingKeys} keys`);
         Logger.info(`💾 Firebase: ${this.FIREBASE_PROJECT_ID}`);
         Logger.info(`⚡ Instant: ${this.INSTANT_DAILY_LIMIT}/ngày, CD ${this.INSTANT_COOLDOWN}s`);
         Logger.info(`🧠 Thinking: ${this.THINKING_DAILY_LIMIT}/ngày, CD ${this.THINKING_COOLDOWN}s`);
