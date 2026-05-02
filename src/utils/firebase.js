@@ -50,26 +50,36 @@ class FirebaseManager {
     }
 
     async deleteUser(userId) {
-        // Delete history subcollection first
-        const history = await this.db.collection('users').doc(userId).collection('history').get();
+        // Xóa cả 2 subcollection history trước
         const batch = this.db.batch();
+
+        const history = await this.db
+            .collection('users').doc(userId)
+            .collection('history').get();
         history.docs.forEach(doc => batch.delete(doc.ref));
+
+        const historyPrivate = await this.db
+            .collection('users').doc(userId)
+            .collection('historyprivate').get();
+        historyPrivate.docs.forEach(doc => batch.delete(doc.ref));
+
         await batch.commit();
 
-        // Delete user doc
+        // Xóa user doc
         await this.db.collection('users').doc(userId).delete();
     }
 
-    /* ================= HISTORY ================= */
+    /* ================= HISTORY (public) ================= */
     async addHistory(userId, messageId, data) {
         const ttl = new Date();
         ttl.setDate(ttl.getDate() + Config.HISTORY_DAYS);
 
-        await this.db.collection('users').doc(userId).collection('history').doc(messageId).set({
-            ...data,
-            ttl: admin.firestore.Timestamp.fromDate(ttl),
-            timestamp: admin.firestore.FieldValue.serverTimestamp()
-        });
+        await this.db.collection('users').doc(userId)
+            .collection('history').doc(messageId).set({
+                ...data,
+                ttl: admin.firestore.Timestamp.fromDate(ttl),
+                timestamp: admin.firestore.FieldValue.serverTimestamp()
+            });
     }
 
     async getHistory(userId, limit = 20) {
@@ -84,7 +94,41 @@ class FirebaseManager {
     }
 
     async clearHistory(userId) {
-        const history = await this.db.collection('users').doc(userId).collection('history').get();
+        const history = await this.db.collection('users')
+            .doc(userId).collection('history').get();
+        const batch = this.db.batch();
+        history.docs.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+    }
+
+    /* ================= HISTORY PRIVATE ================= */
+    // Lưu lịch sử private chat — không công khai cho user
+    async addPrivateHistory(userId, messageId, data) {
+        const ttl = new Date();
+        ttl.setDate(ttl.getDate() + Config.HISTORY_DAYS);
+
+        await this.db.collection('users').doc(userId)
+            .collection('historyprivate').doc(messageId).set({
+                ...data,
+                ttl: admin.firestore.Timestamp.fromDate(ttl),
+                timestamp: admin.firestore.FieldValue.serverTimestamp()
+            });
+    }
+
+    async getPrivateHistory(userId, limit = 50) {
+        const snapshot = await this.db.collection('users')
+            .doc(userId)
+            .collection('historyprivate')
+            .orderBy('timestamp', 'desc')
+            .limit(limit)
+            .get();
+
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    }
+
+    async clearPrivateHistory(userId) {
+        const history = await this.db.collection('users')
+            .doc(userId).collection('historyprivate').get();
         const batch = this.db.batch();
         history.docs.forEach(doc => batch.delete(doc.ref));
         await batch.commit();
@@ -95,7 +139,7 @@ class FirebaseManager {
         await this.db.collection('users').doc(userId).update({
             'quota.instant.dailyRequests': 0,
             'quota.instant.lastReset': admin.firestore.FieldValue.serverTimestamp(),
-            'quota.thinking.dailyUses': 0,
+            'quota.thinking.dailyRequests': 0,
             'quota.thinking.lastReset': admin.firestore.FieldValue.serverTimestamp()
         });
     }
@@ -108,7 +152,7 @@ class FirebaseManager {
             batch.update(doc.ref, {
                 'quota.instant.dailyRequests': 0,
                 'quota.instant.lastReset': admin.firestore.FieldValue.serverTimestamp(),
-                'quota.thinking.dailyUses': 0,
+                'quota.thinking.dailyRequests': 0,
                 'quota.thinking.lastReset': admin.firestore.FieldValue.serverTimestamp()
             });
         });
