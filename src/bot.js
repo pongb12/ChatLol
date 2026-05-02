@@ -218,9 +218,22 @@ class DiscordBot {
     /* ================= HANDLERS ================= */
     async handlePrivateMessage(message) {
         try {
+            // ✅ FIX: Check auth trước khi cho chat
+            const user = await Firebase.getUser(message.author.id);
+            if (!user) {
+                return message.channel.send(
+                    `❌ Bạn chưa đăng ký! Gõ \`${Config.PREFIX}signup\` để đăng ký.`
+                ).catch(() => {});
+            }
+
+            if (!user.isLoggedIn && !Config.isOwner(message.author.id)) {
+                return message.channel.send(
+                    `🔒 Bạn chưa đăng nhập! Gõ \`${Config.PREFIX}login\` để đăng nhập.`
+                ).catch(() => {});
+            }
+
             message.channel.sendTyping().catch(() => {});
             const ai = require('./ai');
-            // Quota ĐƯỢC tính trong private chat
             const response = await ai.process(message.author.id, message.content, 'instant', 'instant');
             await message.channel.send({ content: response }).catch(() => {});
         } catch (error) {
@@ -272,14 +285,12 @@ class DiscordBot {
             if (interaction.isModalSubmit()) {
                 const customId = interaction.customId;
 
-                // Appeal: modal kháng cáo từ user + modal lý do từ chối từ admin
                 if (customId.startsWith('appeal_modal_') || customId.startsWith('appeal_deny_reason_')) {
                     const cmd = this.commands.get('appeal');
                     if (cmd?.handleModalSubmit) await cmd.handleModalSubmit(interaction);
                     return;
                 }
 
-                // Feedback: modal phản hồi từ user + modal reply từ admin
                 if (customId.startsWith('feedback_modal_') || customId.startsWith('feedback_reply_')) {
                     const cmd = this.commands.get('feedbacks');
                     if (cmd?.handleModalSubmit) await cmd.handleModalSubmit(interaction);
@@ -292,7 +303,6 @@ class DiscordBot {
             if (interaction.isButton()) {
                 const customId = interaction.customId;
 
-                // User: Mở form kháng cáo
                 if (customId.startsWith('appeal_open_')) {
                     const requestUserId = customId.replace('appeal_open_', '');
                     if (interaction.user.id !== requestUserId) {
@@ -303,7 +313,6 @@ class DiscordBot {
                     return;
                 }
 
-                // User: Mở form phản hồi
                 if (customId.startsWith('feedback_open_')) {
                     const requestUserId = customId.replace('feedback_open_', '');
                     if (interaction.user.id !== requestUserId) {
@@ -314,7 +323,6 @@ class DiscordBot {
                     return;
                 }
 
-                // Admin: Chấp nhận kháng cáo
                 if (customId.startsWith('approve_appeal_')) {
                     if (!Config.isOwner(interaction.user.id)) {
                         return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true });
@@ -325,7 +333,6 @@ class DiscordBot {
                     return;
                 }
 
-                // Admin: Từ chối kháng cáo → mở modal lý do
                 if (customId.startsWith('deny_appeal_')) {
                     if (!Config.isOwner(interaction.user.id)) {
                         return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true });
@@ -336,7 +343,6 @@ class DiscordBot {
                     return;
                 }
 
-                // Admin: Phản hồi lại feedback → mở modal reply
                 if (customId.startsWith('feedback_reply_btn_')) {
                     if (!Config.isOwner(interaction.user.id)) {
                         return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true });
@@ -358,14 +364,11 @@ class DiscordBot {
 
         } catch (error) {
             Logger.error('Interaction error:', error);
-            // Chỉ reply nếu chưa có response nào — tránh gửi 2 lần
             try {
                 if (!interaction.replied && !interaction.deferred) {
                     await interaction.reply({ content: '❌ Có lỗi xảy ra.', ephemeral: true });
                 }
-            } catch (e) {
-                // Interaction đã expired hoặc đã reply rồi — bỏ qua
-            }
+            } catch (e) {}
         }
     }
 
