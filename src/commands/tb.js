@@ -112,12 +112,8 @@ module.exports = {
         const contentInput = new TextInputBuilder()
             .setCustomId('tb_content')
             .setLabel('Nội dung chính')
-            .setPlaceholder(
-                'Hỗ trợ markdown Discord:\n' +
-                '**in đậm**, *in nghiêng*, __gạch chân__\n' +
-                '> trích dẫn\n' +
-                '`code`, ```code block```'
-            )
+            // Đã fix lỗi string length <= 100 ở dòng dưới đây
+            .setPlaceholder('Hỗ trợ markdown: **đậm**, *nghiêng*, __gạch chân__, > trích dẫn, `code`')
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(true)
             .setMaxLength(3000);
