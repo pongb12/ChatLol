@@ -25,14 +25,12 @@ class AIHandler {
     initClients() {
         const allKeys = Config.GROQ_API_KEYS;
 
-        // Instant pool: key 1,2,3 (index 0,1,2)
         this.instantClients = allKeys.slice(0, 3).map(key => new Groq({
             apiKey: key,
             timeout: 25000,
             maxRetries: 2
         }));
 
-        // Thinking pool: key 4,5 (index 3,4)
         this.thinkingClients = allKeys.slice(3, 5).map(key => new Groq({
             apiKey: key,
             timeout: 25000,
@@ -95,7 +93,6 @@ class AIHandler {
 
         if (Config.isOwner(userId)) return { allowed: true, isAdmin: true };
 
-        // ✅ FIX: Check login session
         if (!user.isLoggedIn) return { allowed: false, reason: 'not_logged_in' };
 
         const quota = user.quota || {};
@@ -117,7 +114,8 @@ class AIHandler {
             };
         }
 
-        const used = quota[model]?.dailyRequests || 0;
+        // ✅ FIX: fallback về dailyUses cho user cũ dùng field thinking cũ
+        const used = quota[model]?.dailyRequests ?? quota[model]?.dailyUses ?? 0;
         const limit = model === 'thinking' ? Config.THINKING_DAILY_LIMIT : Config.INSTANT_DAILY_LIMIT;
 
         if (used >= limit) {
@@ -129,6 +127,7 @@ class AIHandler {
 
     async incrementQuota(userId, model) {
         if (Config.isOwner(userId)) return;
+        // Luôn ghi dailyRequests — chuẩn hoá, không dùng dailyUses nữa
         await Firebase.updateUser(userId, {
             [`quota.${model}.dailyRequests`]: FieldValue.increment(1)
         });
@@ -137,8 +136,11 @@ class AIHandler {
     /* ================= BUILD MESSAGES ================= */
     buildMessages(question, model, context = '') {
         const isThinking = model === 'thinking';
+        const isPrivate = context === 'private';
+
         const coreRules = this.rules.core || '';
-        const typeRules = this.rules[context] || this.rules[isThinking ? 'thinking' : 'instant'] || '';
+        const typeKey = isPrivate ? 'instant' : context;
+        const typeRules = this.rules[typeKey] || this.rules[isThinking ? 'thinking' : 'instant'] || '';
 
         let systemPrompt = coreRules;
         if (typeRules) systemPrompt += '\n' + typeRules;
@@ -176,6 +178,7 @@ class AIHandler {
     /* ================= MAIN PROCESS ================= */
     async process(userId, question, model = 'instant', context = '') {
         const start = Date.now();
+        const isPrivate = context === 'private';
 
         // 1. Firewall
         const fwCheck = await Firewall.check(userId, question);
@@ -206,7 +209,7 @@ class AIHandler {
                 if (model === 'instant') {
                     return `📊 Bạn đã dùng hết ${Config.INSTANT_DAILY_LIMIT} lượt Instant hôm nay.\n💡 Dùng \`${Config.PREFIX}model thinking\` để chuyển sang Thinking (${Config.THINKING_DAILY_LIMIT} lượt/ngày).\n🔄 Reset lúc 7h sáng mai.`;
                 }
-                return `📊 Hết lượt Thinking hôm nay. Reset 0.00 UTC .`;
+                return `📊 Hết lượt Thinking hôm nay. Reset 7h sáng mai.`;
             }
             return `❌ Bạn chưa đăng ký. Gõ \`${Config.PREFIX}signup\` trước.`;
         }
@@ -219,25 +222,33 @@ class AIHandler {
             // 6. Sanitize
             const safeReply = Firewall.sanitize(reply);
 
-            // 7. Increment quota
+            // 7. Increment quota — private chat vẫn tính quota bình thường
             await this.incrementQuota(userId, model);
 
-            // 8. Save history
-            await Firebase.addHistory(userId, `msg_${Date.now()}`, {
+            // 8. Save history — route theo context
+            const historyData = {
                 role: 'assistant',
                 content: safeReply,
                 model: model,
-                question: question.slice(0, 100)
-            });
+                question: question.slice(0, 200)
+            };
 
-            Logger.success(`✅ ${model.toUpperCase()} (${Date.now() - start}ms) - ${userId.slice(0, 6)}`);
+            if (isPrivate) {
+                // Âm thầm lưu vào historyprivate — không công khai cho user
+                await Firebase.addPrivateHistory(userId, `msg_${Date.now()}`, historyData)
+                    .catch(e => Logger.error('addPrivateHistory error:', e.message));
+            } else {
+                await Firebase.addHistory(userId, `msg_${Date.now()}`, historyData);
+            }
+
+            Logger.success(`✅ ${model.toUpperCase()}${isPrivate ? ' [PRV]' : ''} (${Date.now() - start}ms) - ${userId.slice(0, 6)}`);
             return safeReply;
 
         } catch (err) {
             Logger.error('❌ AI Error:', err.message);
 
             if (err.status === 429) return '⚠️ Quá nhiều request. Thử lại sau 1 phút.';
-            if (err.status === 401) return '❌ lỗi request. Liên hệ admin.';
+            if (err.status === 401) return '❌ Lỗi request. Feedback admin hoặc thử lại sau.';
             if (err.status >= 500) return '❌ Server lỗi. Thử lại sau.';
             if (err.message?.includes('timeout')) return '⏰ AI phản hồi chậm. Thử lại.';
 
