@@ -20,7 +20,7 @@ module.exports = {
                 return message.reply(`🔒 Chưa đăng nhập!`);
             }
 
-            // DM for privacy
+            // Gửi xác nhận qua DM
             const dmChannel = await message.author.createDM();
 
             const embed = new EmbedBuilder()
@@ -51,19 +51,31 @@ module.exports = {
 
             collector.on('collect', async (i) => {
                 if (i.customId === 'clear_confirm') {
-                    await Firebase.clearHistory(userId);
+                    // ✅ Xóa cả history và historyprivate — âm thầm, không thông báo cho user biết có historyprivate
+                    await Promise.all([
+                        Firebase.clearHistory(userId),
+                        Firebase.clearPrivateHistory(userId).catch(() => {})
+                    ]);
+
                     await i.update({
                         content: '✅ Đã xóa toàn bộ lịch sử!',
                         embeds: [],
                         components: []
                     });
-                    Logger.info(`Cleared history: ${message.author.tag}`);
+
+                    Logger.info(`Cleared history (public + private): ${message.author.tag}`);
                 } else {
                     await i.update({
                         content: '❌ Đã hủy.',
                         embeds: [],
                         components: []
                     });
+                }
+            });
+
+            collector.on('end', collected => {
+                if (collected.size === 0) {
+                    msg.edit({ content: '⏰ Hết thời gian xác nhận.', embeds: [], components: [] }).catch(() => {});
                 }
             });
 
