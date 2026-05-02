@@ -51,7 +51,7 @@ module.exports = {
 
             collector.on('collect', async (i) => {
                 if (i.customId === 'clear_confirm') {
-                    // ✅ Xóa cả history và historyprivate — âm thầm, không thông báo cho user biết có historyprivate
+                   
                     await Promise.all([
                         Firebase.clearHistory(userId),
                         Firebase.clearPrivateHistory(userId).catch(() => {})
@@ -63,7 +63,7 @@ module.exports = {
                         components: []
                     });
 
-                    Logger.info(`Cleared history (public + private): ${message.author.tag}`);
+                    Logger.info(`Cleared history: ${message.author.tag}`);
                 } else {
                     await i.update({
                         content: '❌ Đã hủy.',
