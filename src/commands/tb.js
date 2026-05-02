@@ -5,7 +5,8 @@ const {
     ButtonStyle,
     ModalBuilder,
     TextInputBuilder,
-    TextInputStyle
+    TextInputStyle,
+    MessageFlags // Import thêm để sửa lỗi Warning Ephemeral
 } = require('discord.js');
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
@@ -92,11 +93,16 @@ module.exports = {
         const userId = interaction.user.id;
         const pending = pendingAnnounce.get(userId);
 
+        // Kiểm tra hết hạn (5 phút)
         if (!pending || Date.now() - pending.timestamp > 300000) {
             pendingAnnounce.delete(userId);
-            return interaction.reply({ content: '⏰ Đã hết hạn. Dùng lại lệnh `.tb`!', ephemeral: true });
+            return interaction.reply({ 
+                content: '⏰ Đã hết hạn. Dùng lại lệnh `.tb`!', 
+                flags: [MessageFlags.Ephemeral] // Đã sửa lỗi Warning
+            });
         }
 
+        // Tối ưu hóa: Tạo modal nhanh nhất có thể để tránh lỗi "Unknown Interaction" (10062)
         const modal = new ModalBuilder()
             .setCustomId(`tb_modal_${userId}_${Date.now()}`)
             .setTitle('📢 Soạn Thông Báo');
@@ -112,8 +118,8 @@ module.exports = {
         const contentInput = new TextInputBuilder()
             .setCustomId('tb_content')
             .setLabel('Nội dung chính')
-            // Đã fix lỗi string length <= 100 ở dòng dưới đây
-            .setPlaceholder('Hỗ trợ markdown: **đậm**, *nghiêng*, __gạch chân__, > trích dẫn, `code`')
+            // Fix lỗi String Length > 100: Rút ngắn placeholder xuống dưới 100 ký tự
+            .setPlaceholder('Hỗ trợ: **đậm**, *nghiêng*, __gạch chân__, > trích dẫn, `code`...')
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(true)
             .setMaxLength(3000);
@@ -129,7 +135,7 @@ module.exports = {
         const footerInput = new TextInputBuilder()
             .setCustomId('tb_footer')
             .setLabel('Footer — để trống nếu không cần')
-            .setPlaceholder('Ví dụ: Lol.AI Team • 01/01/2025')
+            .setPlaceholder('Ví dụ: Lol.AI Team • 01/01/2026')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
             .setMaxLength(200);
@@ -150,6 +156,7 @@ module.exports = {
             new ActionRowBuilder().addComponents(pingInput)
         );
 
+        // Gửi modal ngay lập tức
         await interaction.showModal(modal);
     },
 
@@ -167,7 +174,10 @@ module.exports = {
         const pending = pendingAnnounce.get(userId);
 
         if (!pending) {
-            return interaction.reply({ content: '⏰ Đã hết hạn. Dùng lại lệnh `.tb`!', ephemeral: true });
+            return interaction.reply({ 
+                content: '⏰ Đã hết hạn. Dùng lại lệnh `.tb`!', 
+                flags: [MessageFlags.Ephemeral] 
+            });
         }
 
         try {
@@ -204,7 +214,10 @@ module.exports = {
             const targetChannel = await interaction.client.channels.fetch(pending.channelId).catch(() => null);
             if (!targetChannel) {
                 pendingAnnounce.delete(userId);
-                return interaction.reply({ content: '❌ Không tìm thấy channel đích. Thử lại!', ephemeral: true });
+                return interaction.reply({ 
+                    content: '❌ Không tìm thấy channel đích. Thử lại!', 
+                    flags: [MessageFlags.Ephemeral] 
+                });
             }
 
             // Xử lý ping
@@ -235,7 +248,10 @@ module.exports = {
                 )
                 .setTimestamp();
 
-            await interaction.reply({ embeds: [previewEmbed], ephemeral: true });
+            await interaction.reply({ 
+                embeds: [previewEmbed], 
+                flags: [MessageFlags.Ephemeral] 
+            });
 
             Logger.warn(`📢 Announce sent to #${pending.channelName} by ${interaction.user.tag}`);
 
@@ -243,7 +259,10 @@ module.exports = {
             Logger.error('tb modal submit error:', error);
             pendingAnnounce.delete(userId);
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: '❌ Lỗi gửi thông báo. Thử lại!', ephemeral: true }).catch(() => {});
+                await interaction.reply({ 
+                    content: '❌ Lỗi gửi thông báo. Thử lại!', 
+                    flags: [MessageFlags.Ephemeral] 
+                }).catch(() => {});
             }
         }
     }
