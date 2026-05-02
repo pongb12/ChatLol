@@ -5,50 +5,81 @@ const Firebase = require('../utils/firebase');
 
 module.exports = {
     name: 'profile',
-    description: 'Xem thông tin cá nhân',
+    description: 'Xem thông tin cá nhân | Admin: .profile <userId>',
     cooldown: 5,
 
     async execute(message, args) {
-        const userId = message.author.id;
+        const requesterId = message.author.id;
+        const isAdmin = Config.isOwner(requesterId);
 
+        // ===== ADMIN LOOKUP =====
+        if (args.length > 0 && isAdmin) {
+            const targetId = args[0].replace(/[<@!>]/g, ''); // hỗ trợ cả mention lẫn raw ID
+
+            if (!/^\d{17,20}$/.test(targetId)) {
+                return message.reply('❌ User ID không hợp lệ! Dùng: `.profile <userId>`');
+            }
+
+            try {
+                const targetUser = await Firebase.getUser(targetId);
+                if (!targetUser) {
+                    return message.reply(`❌ Không tìm thấy user \`${targetId}\` trong database.`);
+                }
+
+                // Fetch Discord user info nếu có thể
+                let discordTag = targetUser.idUsername || targetId;
+                let avatarURL = null;
+                try {
+                    const discordUser = await message.client.users.fetch(targetId);
+                    discordTag = discordUser.tag;
+                    avatarURL = discordUser.displayAvatarURL();
+                } catch (_) {}
+
+                const isBanned = await Firebase.isBanned(targetId);
+                const embed = await buildProfileEmbed(targetUser, targetId, discordTag, avatarURL, isBanned, true);
+
+                // Admin nhận qua DM để bảo mật
+                const dmChannel = await message.author.createDM();
+                await dmChannel.send({ embeds: [embed] });
+
+                if (message.channel.type !== 1 && !message.channel.isDMBased()) {
+                    const reply = await message.reply(`📩 Đã gửi thông tin của \`${discordTag}\` qua DM!`);
+                    setTimeout(() => reply.delete().catch(() => {}), 4000);
+                }
+
+                Logger.info(`Admin profile lookup: ${targetId} by ${message.author.tag}`);
+            } catch (error) {
+                Logger.error('Admin profile lookup error:', error);
+                message.reply('❌ Lỗi tra cứu. Thử lại!');
+            }
+            return;
+        }
+
+        // ===== NORMAL USER (hoặc admin xem chính mình) =====
         try {
-            const user = await Firebase.getUser(userId);
+            const user = await Firebase.getUser(requesterId);
             if (!user) {
                 return message.reply(`❌ Bạn chưa đăng ký! Gõ \`${Config.PREFIX}signup\`.`);
             }
 
-            // Check login
-            if (!user.isLoggedIn) {
+            if (!user.isLoggedIn && !isAdmin) {
                 return message.reply(`🔒 Bạn chưa đăng nhập. Gõ \`${Config.PREFIX}login\`.`);
             }
 
-            // Send via DM for privacy
+            const isBanned = await Firebase.isBanned(requesterId);
+            const embed = await buildProfileEmbed(
+                user,
+                requesterId,
+                message.author.tag,
+                message.author.displayAvatarURL(),
+                isBanned,
+                false
+            );
+
+            // Gửi qua DM
             const dmChannel = await message.author.createDM();
-
-            const quota = user.quota || {};
-            const instantUsed = quota.instant?.dailyRequests || 0;
-            const thinkingUsed = quota.thinking?.dailyUses || 0;
-
-            const embed = new EmbedBuilder()
-                .setColor(0x7289DA)
-                .setTitle('👤 Hồ sơ của bạn')
-                .setThumbnail(message.author.displayAvatarURL())
-                .addFields(
-                    { name: '🆔 ID', value: user.discordId || userId, inline: true },
-                    { name: '📛 Tag', value: user.idUsername || message.author.tag, inline: true },
-                    { name: '📅 Đăng ký', value: user.registeredAt?.toDate?.().toLocaleString('vi-VN') || 'N/A', inline: true },
-                    { name: '⏰ Session', value: user.isPermanentAdmin ? '👑 Vĩnh viễn' : (user.sessionExpires?.toDate?.().toLocaleString('vi-VN') || 'N/A'), inline: true },
-                    { name: '🧠 Model', value: user.preferredModel === 'thinking' ? '🧠 Thinking' : '⚡ Instant', inline: true },
-                    { name: '📊 Tổng tin nhắn', value: (user.stats?.totalMessages || 0).toString(), inline: true },
-                    { name: '⚡ Instant', value: `${instantUsed}/${Config.INSTANT_DAILY_LIMIT} hôm nay`, inline: true },
-                    { name: '🧠 Thinking', value: `${thinkingUsed}/${Config.THINKING_DAILY_LIMIT} hôm nay`, inline: true }
-                )
-                .setFooter({ text: `Lol.AI v${Config.BOT_VERSION}` })
-                .setTimestamp();
-
             await dmChannel.send({ embeds: [embed] });
 
-            // Confirm in original channel
             if (message.channel.type !== 1 && !message.channel.isDMBased()) {
                 const reply = await message.reply('📩 Đã gửi thông tin qua DM!');
                 setTimeout(() => reply.delete().catch(() => {}), 3000);
@@ -60,3 +91,104 @@ module.exports = {
         }
     }
 };
+
+/* ================= BUILD EMBED ================= */
+async function buildProfileEmbed(user, userId, discordTag, avatarURL, isBanned, isAdminView) {
+    const quota = user.quota || {};
+
+    // ✅ FIX: Đọc đúng field — instant dùng dailyRequests, thinking dùng dailyRequests (chuẩn hoá)
+    // Hỗ trợ cả field cũ (dailyUses) lẫn field mới (dailyRequests)
+    const instantUsed = quota.instant?.dailyRequests ?? 0;
+    const thinkingUsed = quota.thinking?.dailyRequests ?? quota.thinking?.dailyUses ?? 0;
+
+    const instantLimit = Config.INSTANT_DAILY_LIMIT;
+    const thinkingLimit = Config.THINKING_DAILY_LIMIT;
+
+    // Bar visualisation  ▓░░░░░░░░░
+    const instantBar = buildBar(instantUsed, instantLimit);
+    const thinkingBar = buildBar(thinkingUsed, thinkingLimit);
+
+    // Quota reset time
+    const instantReset = quota.instant?.lastReset?.toDate?.();
+    const thinkingReset = quota.thinking?.lastReset?.toDate?.();
+
+    const sessionExpires = user.sessionExpires?.toDate?.();
+    const registeredAt = user.registeredAt?.toDate?.() || user.createdAt?.toDate?.();
+    const lastActive = user.lastActive?.toDate?.();
+
+    const embed = new EmbedBuilder()
+        .setColor(isAdminView ? 0xFFD700 : 0x7289DA)
+        .setTitle(isAdminView ? `👑 Admin View — ${discordTag}` : '👤 Hồ sơ của bạn')
+        .addFields(
+            {
+                name: '🆔 Discord',
+                value: `${discordTag}\n\`${userId}\``,
+                inline: true
+            },
+            {
+                name: '📅 Đăng ký',
+                value: registeredAt ? registeredAt.toLocaleString('vi-VN') : 'N/A',
+                inline: true
+            },
+            {
+                name: '🕒 Hoạt động',
+                value: lastActive ? lastActive.toLocaleString('vi-VN') : 'N/A',
+                inline: true
+            },
+            {
+                name: '🔐 Session',
+                value: user.isPermanentAdmin
+                    ? '👑 Vĩnh viễn (Admin)'
+                    : (sessionExpires ? sessionExpires.toLocaleString('vi-VN') : 'N/A'),
+                inline: true
+            },
+            {
+                name: '🧠 Model',
+                value: user.preferredModel === 'thinking' ? '🧠 Thinking' : '⚡ Instant',
+                inline: true
+            },
+            {
+                name: '📊 Tổng tin nhắn',
+                value: (user.stats?.totalMessages ?? 0).toString(),
+                inline: true
+            },
+            {
+                name: `⚡ Instant hôm nay`,
+                value: `${instantBar}\n${instantUsed}/${instantLimit} lượt${instantReset ? `\nReset: ${instantReset.toLocaleString('vi-VN')}` : ''}`,
+                inline: false
+            },
+            {
+                name: `🧠 Thinking hôm nay`,
+                value: `${thinkingBar}\n${thinkingUsed}/${thinkingLimit} lượt${thinkingReset ? `\nReset: ${thinkingReset.toLocaleString('vi-VN')}` : ''}`,
+                inline: false
+            }
+        );
+
+    if (isAdminView) {
+        embed.addFields(
+            {
+                name: '🔒 Trạng thái',
+                value: [
+                    `Login: ${user.isLoggedIn ? '✅' : '❌'}`,
+                    `Admin: ${user.isPermanentAdmin ? '✅' : '❌'}`,
+                    `Banned: ${isBanned ? '🚫 Có' : '✅ Không'}`
+                ].join('\n'),
+                inline: true
+            }
+        );
+    }
+
+    if (avatarURL) embed.setThumbnail(avatarURL);
+    embed.setFooter({ text: `Lol.AI v${Config.BOT_VERSION}` }).setTimestamp();
+
+    return embed;
+}
+
+/* ================= BAR ================= */
+function buildBar(used, limit, length = 10) {
+    const filled = limit > 0 ? Math.round((used / limit) * length) : 0;
+    const empty = length - filled;
+    const bar = '▓'.repeat(Math.max(0, filled)) + '░'.repeat(Math.max(0, empty));
+    const pct = limit > 0 ? Math.round((used / limit) * 100) : 0;
+    return `\`${bar}\` ${pct}%`;
+}
