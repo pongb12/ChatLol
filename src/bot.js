@@ -55,7 +55,6 @@ class DiscordBot {
     }
 
     setupEventHandlers() {
-        // Ready
         this.client.once(Events.ClientReady, async () => {
             Logger.success(`✅ ${Config.BOT_NAME} v${Config.BOT_VERSION} online!`);
             Logger.success(`Tag: ${this.client.user?.tag || 'Unknown'}`);
@@ -77,7 +76,6 @@ class DiscordBot {
             this.startQuotaReset();
         });
 
-        // MessageCreate
         this.client.on(Events.MessageCreate, async (message) => {
             try {
                 if (message.author.bot) return;
@@ -110,12 +108,10 @@ class DiscordBot {
             }
         });
 
-        // InteractionCreate
         this.client.on(Events.InteractionCreate, async (interaction) => {
             await this.handleInteraction(interaction);
         });
 
-        // Errors
         this.client.on(Events.Error, (error) => {
             Logger.error('Discord client error:', error?.message);
         });
@@ -218,24 +214,37 @@ class DiscordBot {
     /* ================= HANDLERS ================= */
     async handlePrivateMessage(message) {
         try {
-            // ✅ FIX: Check auth trước khi cho chat
+            // ✅ Check auth
             const user = await Firebase.getUser(message.author.id);
             if (!user) {
                 return message.channel.send(
                     `❌ Bạn chưa đăng ký! Gõ \`${Config.PREFIX}signup\` để đăng ký.`
                 ).catch(() => {});
             }
-
             if (!user.isLoggedIn && !Config.isOwner(message.author.id)) {
                 return message.channel.send(
                     `🔒 Bạn chưa đăng nhập! Gõ \`${Config.PREFIX}login\` để đăng nhập.`
                 ).catch(() => {});
             }
 
+            // ✅ Âm thầm lưu tin nhắn của user vào historyprivate
+            Firebase.addPrivateHistory(message.author.id, `user_${Date.now()}`, {
+                role: 'user',
+                content: message.content.slice(0, 500),
+                model: user.preferredModel || 'instant',
+                timestamp_ms: Date.now()
+            }).catch(e => Logger.error('addPrivateHistory (user msg) error:', e.message));
+
             message.channel.sendTyping().catch(() => {});
+
             const ai = require('./ai');
-            const response = await ai.process(message.author.id, message.content, 'instant', 'instant');
+            const model = user.preferredModel || 'instant';
+
+            // ✅ Context 'private' → ai.js lưu vào historyprivate thay vì history
+            const response = await ai.process(message.author.id, message.content, model, 'private');
+
             await message.channel.send({ content: response }).catch(() => {});
+
         } catch (error) {
             Logger.error('Private message error:', error);
             await message.channel.send('❌ Lỗi. Thử lại!').catch(() => {});
@@ -249,7 +258,6 @@ class DiscordBot {
         const command = this.commands.get(commandName);
         if (!command) return;
 
-        // Cooldown
         if (!this.cooldowns.has(command.name)) {
             this.cooldowns.set(command.name, new Collection());
         }
@@ -281,7 +289,6 @@ class DiscordBot {
 
     async handleInteraction(interaction) {
         try {
-            // ===== MODAL SUBMIT =====
             if (interaction.isModalSubmit()) {
                 const customId = interaction.customId;
 
@@ -299,7 +306,6 @@ class DiscordBot {
                 return;
             }
 
-            // ===== BUTTON =====
             if (interaction.isButton()) {
                 const customId = interaction.customId;
 
@@ -356,7 +362,6 @@ class DiscordBot {
                 return;
             }
 
-            // ===== SLASH COMMAND =====
             if (interaction.isChatInputCommand()) {
                 const cmd = this.commands.get(interaction.commandName);
                 if (cmd) await cmd.execute(interaction);
