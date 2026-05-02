@@ -36,7 +36,7 @@ module.exports = {
         if (isAdmin) {
             embed.addFields({
                 name: '👑 Admin',
-                value: `\`${Config.PREFIX}setban\` - Ban user\n\`${Config.PREFIX}unban\` - Gỡ ban`
+                value: `\`${Config.PREFIX}setban\` - Ban user\n\`${Config.PREFIX}unban\` - Gỡ ban\n\`${Config.PREFIX}tb\` - Gửi thông báo server`
             });
         }
 
