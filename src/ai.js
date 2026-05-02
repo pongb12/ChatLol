@@ -53,7 +53,6 @@ class AIHandler {
     }
 
     getRandomClient() {
-        // Random trong instant pool (key 1,2,3)
         const pool = this.instantClients;
         if (!pool.length) {
             Logger.warn('⚠️ Instant pool trống!');
@@ -63,10 +62,8 @@ class AIHandler {
     }
 
     getThinkingClient() {
-        // Random trong thinking pool (key 4,5)
         const pool = this.thinkingClients;
         if (!pool.length) {
-            // Fallback về instant pool nếu không có thinking keys
             Logger.warn('⚠️ Thinking pool trống, fallback về Instant pool');
             return this.getRandomClient();
         }
@@ -97,6 +94,9 @@ class AIHandler {
         if (!user) return { allowed: false, reason: 'not_registered' };
 
         if (Config.isOwner(userId)) return { allowed: true, isAdmin: true };
+
+        // ✅ FIX: Check login session
+        if (!user.isLoggedIn) return { allowed: false, reason: 'not_logged_in' };
 
         const quota = user.quota || {};
         const now = new Date();
@@ -196,16 +196,19 @@ class AIHandler {
             return `⏰ Chờ ${cdCheck.wait}s trước khi dùng ${model === 'thinking' ? 'Thinking' : 'Instant'}.`;
         }
 
-        // 4. Check quota
+        // 4. Check quota (bao gồm check login)
         const quotaCheck = await this.checkQuota(userId, model);
         if (!quotaCheck.allowed) {
+            if (quotaCheck.reason === 'not_logged_in') {
+                return `🔒 Bạn chưa đăng nhập. Gõ \`${Config.PREFIX}login\` để đăng nhập.`;
+            }
             if (quotaCheck.reason === 'quota_exceeded') {
                 if (model === 'instant') {
                     return `📊 Bạn đã dùng hết ${Config.INSTANT_DAILY_LIMIT} lượt Instant hôm nay.\n💡 Dùng \`${Config.PREFIX}model thinking\` để chuyển sang Thinking (${Config.THINKING_DAILY_LIMIT} lượt/ngày).\n🔄 Reset lúc 7h sáng mai.`;
                 }
-                return `📊 Hết lượt Thinking hôm nay. Reset 7h sáng mai.`;
+                return `📊 Hết lượt Thinking hôm nay. Reset 0.00 UTC .`;
             }
-            return '❌ Bạn chưa đăng ký. Gõ `.signup` trước.';
+            return `❌ Bạn chưa đăng ký. Gõ \`${Config.PREFIX}signup\` trước.`;
         }
 
         // 5. Call AI
@@ -234,8 +237,8 @@ class AIHandler {
             Logger.error('❌ AI Error:', err.message);
 
             if (err.status === 429) return '⚠️ Quá nhiều request. Thử lại sau 1 phút.';
-            if (err.status === 401) return '❌ API Key lỗi. Liên hệ admin.';
-            if (err.status >= 500) return '❌ Server AI lỗi. Thử lại sau.';
+            if (err.status === 401) return '❌ lỗi request. Liên hệ admin.';
+            if (err.status >= 500) return '❌ Server lỗi. Thử lại sau.';
             if (err.message?.includes('timeout')) return '⏰ AI phản hồi chậm. Thử lại.';
 
             return '❌ Có lỗi xảy ra. Thử lại sau!';
