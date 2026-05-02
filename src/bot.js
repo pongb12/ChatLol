@@ -303,6 +303,14 @@ class DiscordBot {
                     if (cmd?.handleModalSubmit) await cmd.handleModalSubmit(interaction);
                     return;
                 }
+
+                // tb: gửi thông báo
+                if (customId.startsWith('tb_modal_')) {
+                    const cmd = this.commands.get('tb');
+                    if (cmd?.handleModalSubmit) await cmd.handleModalSubmit(interaction);
+                    return;
+                }
+
                 return;
             }
 
@@ -356,6 +364,26 @@ class DiscordBot {
                     const targetUserId = customId.replace('feedback_reply_btn_', '');
                     const cmd = this.commands.get('feedbacks');
                     if (cmd?.handleReplyButton) await cmd.handleReplyButton(interaction, targetUserId);
+                    return;
+                }
+
+                // tb: mở form soạn thông báo
+                if (customId.startsWith('tb_open_')) {
+                    if (!Config.isOwner(interaction.user.id)) {
+                        return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true });
+                    }
+                    const cmd = this.commands.get('tb');
+                    if (cmd?.handleOpenButton) await cmd.handleOpenButton(interaction);
+                    return;
+                }
+
+                // tb: hủy
+                if (customId.startsWith('tb_cancel_')) {
+                    if (!Config.isOwner(interaction.user.id)) {
+                        return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true });
+                    }
+                    const cmd = this.commands.get('tb');
+                    if (cmd?.handleCancelButton) await cmd.handleCancelButton(interaction);
                     return;
                 }
 
