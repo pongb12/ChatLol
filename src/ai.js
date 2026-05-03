@@ -7,6 +7,7 @@ const Config = require('./utils/config');
 const Logger = require('./utils/logger');
 const Firewall = require('./utils/firewall');
 const Firebase = require('./utils/firebase');
+const { getLastResetBoundary } = require('./utils/time');
 
 class AIHandler {
     constructor() {
@@ -96,14 +97,13 @@ class AIHandler {
         if (!user.isLoggedIn) return { allowed: false, reason: 'not_logged_in' };
 
         const quota = user.quota || {};
-        const now = new Date();
 
+        // Mốc reset gần nhất (dựa vào RESET_HOUR_UTC, VD: 0 = midnight UTC = 7h sáng VN)
+        const resetBoundary = getLastResetBoundary(Config.RESET_HOUR_UTC);
         const lastReset = quota[model]?.lastReset?.toDate?.() || new Date(0);
-        const isNewDay = now.getUTCDate() !== lastReset.getUTCDate() ||
-                        now.getUTCMonth() !== lastReset.getUTCMonth() ||
-                        now.getUTCFullYear() !== lastReset.getUTCFullYear();
 
-        if (isNewDay) {
+        // Nếu lần reset cuối trước mốc hiện tại → chu kỳ mới, reset quota
+        if (lastReset < resetBoundary) {
             await Firebase.updateUser(userId, {
                 [`quota.${model}.dailyRequests`]: 0,
                 [`quota.${model}.lastReset`]: FieldValue.serverTimestamp()
@@ -114,7 +114,7 @@ class AIHandler {
             };
         }
 
-        // ✅ FIX: fallback về dailyUses cho user cũ dùng field thinking cũ
+        // FIX: fallback về dailyUses cho user cũ
         const used = quota[model]?.dailyRequests ?? quota[model]?.dailyUses ?? 0;
         const limit = model === 'thinking' ? Config.THINKING_DAILY_LIMIT : Config.INSTANT_DAILY_LIMIT;
 
@@ -127,7 +127,6 @@ class AIHandler {
 
     async incrementQuota(userId, model) {
         if (Config.isOwner(userId)) return;
-        // Luôn ghi dailyRequests — chuẩn hoá, không dùng dailyUses nữa
         await Firebase.updateUser(userId, {
             [`quota.${model}.dailyRequests`]: FieldValue.increment(1)
         });
@@ -222,10 +221,10 @@ class AIHandler {
             // 6. Sanitize
             const safeReply = Firewall.sanitize(reply);
 
-            // 7. Increment quota — private chat vẫn tính quota bình thường
+            // 7. Increment quota
             await this.incrementQuota(userId, model);
 
-            // 8. Save history — route theo context
+            // 8. Save history
             const historyData = {
                 role: 'assistant',
                 content: safeReply,
@@ -234,7 +233,6 @@ class AIHandler {
             };
 
             if (isPrivate) {
-                // Âm thầm lưu vào historyprivate — không công khai cho user
                 await Firebase.addPrivateHistory(userId, `msg_${Date.now()}`, historyData)
                     .catch(e => Logger.error('addPrivateHistory error:', e.message));
             } else {
