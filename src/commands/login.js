@@ -3,6 +3,7 @@ const { FieldValue, Timestamp } = require('firebase-admin/firestore');
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
 const Firebase = require('../utils/firebase');
+const { formatVN } = require('../utils/time');
 
 module.exports = {
     name: 'login',
@@ -56,7 +57,8 @@ module.exports = {
             const embed = new EmbedBuilder()
                 .setColor(0x00FF00)
                 .setTitle('🔓 Đăng nhập thành công!')
-                .setDescription(`Xin chào **${message.author.tag}**!\n\n⏰ Session hết hạn: ${sessionExpires.toLocaleString('vi-VN')}\n🔄 Gõ \`${Config.PREFIX}login\` để gia hạn.`)
+                // FIX: dùng formatVN để hiển thị giờ VN đúng
+                .setDescription(`Xin chào **${message.author.tag}**!\n\n⏰ Session hết hạn: ${formatVN(sessionExpires)}\n🔄 Gõ \`${Config.PREFIX}login\` để gia hạn.`)
                 .setTimestamp();
 
             message.reply({ embeds: [embed] });
