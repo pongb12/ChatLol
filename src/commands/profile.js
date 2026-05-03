@@ -2,6 +2,7 @@ const { EmbedBuilder } = require('discord.js');
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
 const Firebase = require('../utils/firebase');
+const { formatVN } = require('../utils/time');
 
 module.exports = {
     name: 'profile',
@@ -14,7 +15,7 @@ module.exports = {
 
         // ===== ADMIN LOOKUP =====
         if (args.length > 0 && isAdmin) {
-            const targetId = args[0].replace(/[<@!>]/g, ''); // hỗ trợ cả mention lẫn raw ID
+            const targetId = args[0].replace(/[<@!>]/g, '');
 
             if (!/^\d{17,20}$/.test(targetId)) {
                 return message.reply('❌ User ID không hợp lệ! Dùng: `.profile <userId>`');
@@ -26,7 +27,6 @@ module.exports = {
                     return message.reply(`❌ Không tìm thấy user \`${targetId}\` trong database.`);
                 }
 
-                // Fetch Discord user info nếu có thể
                 let discordTag = targetUser.idUsername || targetId;
                 let avatarURL = null;
                 try {
@@ -38,7 +38,6 @@ module.exports = {
                 const isBanned = await Firebase.isBanned(targetId);
                 const embed = await buildProfileEmbed(targetUser, targetId, discordTag, avatarURL, isBanned, true);
 
-                // Admin nhận qua DM để bảo mật
                 const dmChannel = await message.author.createDM();
                 await dmChannel.send({ embeds: [embed] });
 
@@ -55,7 +54,7 @@ module.exports = {
             return;
         }
 
-        // ===== NORMAL USER (hoặc admin xem chính mình) =====
+        // ===== NORMAL USER =====
         try {
             const user = await Firebase.getUser(requesterId);
             if (!user) {
@@ -76,7 +75,6 @@ module.exports = {
                 false
             );
 
-            // Gửi qua DM
             const dmChannel = await message.author.createDM();
             await dmChannel.send({ embeds: [embed] });
 
@@ -96,22 +94,18 @@ module.exports = {
 async function buildProfileEmbed(user, userId, discordTag, avatarURL, isBanned, isAdminView) {
     const quota = user.quota || {};
 
-    // ✅ FIX: Đọc đúng field — instant dùng dailyRequests, thinking dùng dailyRequests (chuẩn hoá)
-    // Hỗ trợ cả field cũ (dailyUses) lẫn field mới (dailyRequests)
     const instantUsed = quota.instant?.dailyRequests ?? 0;
     const thinkingUsed = quota.thinking?.dailyRequests ?? quota.thinking?.dailyUses ?? 0;
 
     const instantLimit = Config.INSTANT_DAILY_LIMIT;
     const thinkingLimit = Config.THINKING_DAILY_LIMIT;
 
-    // Bar visualisation  ▓░░░░░░░░░
     const instantBar = buildBar(instantUsed, instantLimit);
     const thinkingBar = buildBar(thinkingUsed, thinkingLimit);
 
-    // Quota reset time
-    const instantReset = quota.instant?.lastReset?.toDate?.();
-    const thinkingReset = quota.thinking?.lastReset?.toDate?.();
-
+    // FIX: dùng formatVN cho tất cả timestamp → hiện đúng giờ VN
+    const instantResetDate = quota.instant?.lastReset?.toDate?.();
+    const thinkingResetDate = quota.thinking?.lastReset?.toDate?.();
     const sessionExpires = user.sessionExpires?.toDate?.();
     const registeredAt = user.registeredAt?.toDate?.() || user.createdAt?.toDate?.();
     const lastActive = user.lastActive?.toDate?.();
@@ -127,19 +121,19 @@ async function buildProfileEmbed(user, userId, discordTag, avatarURL, isBanned, 
             },
             {
                 name: '📅 Đăng ký',
-                value: registeredAt ? registeredAt.toLocaleString('vi-VN') : 'N/A',
+                value: formatVN(registeredAt),
                 inline: true
             },
             {
                 name: '🕒 Hoạt động',
-                value: lastActive ? lastActive.toLocaleString('vi-VN') : 'N/A',
+                value: formatVN(lastActive),
                 inline: true
             },
             {
                 name: '🔐 Session',
                 value: user.isPermanentAdmin
                     ? '👑 Vĩnh viễn (Admin)'
-                    : (sessionExpires ? sessionExpires.toLocaleString('vi-VN') : 'N/A'),
+                    : formatVN(sessionExpires),
                 inline: true
             },
             {
@@ -154,12 +148,12 @@ async function buildProfileEmbed(user, userId, discordTag, avatarURL, isBanned, 
             },
             {
                 name: `⚡ Instant hôm nay`,
-                value: `${instantBar}\n${instantUsed}/${instantLimit} lượt${instantReset ? `\nReset: ${instantReset.toLocaleString('vi-VN')}` : ''}`,
+                value: `${instantBar}\n${instantUsed}/${instantLimit} lượt${instantResetDate ? `\nReset: ${formatVN(instantResetDate)}` : ''}`,
                 inline: false
             },
             {
                 name: `🧠 Thinking hôm nay`,
-                value: `${thinkingBar}\n${thinkingUsed}/${thinkingLimit} lượt${thinkingReset ? `\nReset: ${thinkingReset.toLocaleString('vi-VN')}` : ''}`,
+                value: `${thinkingBar}\n${thinkingUsed}/${thinkingLimit} lượt${thinkingResetDate ? `\nReset: ${formatVN(thinkingResetDate)}` : ''}`,
                 inline: false
             }
         );
