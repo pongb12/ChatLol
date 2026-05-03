@@ -5,6 +5,7 @@ const Config = require('./utils/config');
 const Logger = require('./utils/logger');
 const Firebase = require('./utils/firebase');
 const PrivateChatManager = require('./privateManager');
+const { formatVN, getNextResetTime } = require('./utils/time');
 
 class DiscordBot {
     constructor() {
@@ -180,7 +181,10 @@ class DiscordBot {
                         try {
                             const discordUser = await this.client.users.fetch(doc.id);
                             if (discordUser) {
-                                await discordUser.send(`⚠️ Session của bạn sẽ hết hạn sau 24h. Gõ \`${Config.PREFIX}login\` để gia hạn.`).catch(() => {});
+                                // FIX: dùng formatVN để hiển thị giờ VN đúng
+                                await discordUser.send(
+                                    `⚠️ Session của bạn sẽ hết hạn vào **${formatVN(expires)}**. Gõ \`${Config.PREFIX}login\` để gia hạn.`
+                                ).catch(() => {});
                                 await Firebase.updateUser(doc.id, { notifiedExpiry: true });
                             }
                         } catch (e) {}
@@ -193,28 +197,21 @@ class DiscordBot {
     }
 
     startQuotaReset() {
-        const now = new Date();
-        const nextReset = new Date(Date.UTC(
-            now.getUTCFullYear(),
-            now.getUTCMonth(),
-            now.getUTCDate(),
-            Config.RESET_HOUR_UTC, 0, 0
-        ));
-        if (nextReset <= now) nextReset.setUTCDate(nextReset.getUTCDate() + 1);
+        // FIX: dùng getNextResetTime để tính đúng, log bằng formatVN
+        const nextReset = getNextResetTime(Config.RESET_HOUR_UTC);
+        const msUntilReset = nextReset.getTime() - Date.now();
 
-        const msUntilReset = nextReset - now;
         setTimeout(() => {
             Firebase.resetAllQuotas();
             setInterval(() => Firebase.resetAllQuotas(), 86400000);
         }, msUntilReset);
 
-        Logger.info(`⏰ Quota reset lúc ${nextReset.toISOString()}`);
+        Logger.info(`⏰ Quota reset lúc ${formatVN(nextReset)} (giờ VN)`);
     }
 
     /* ================= HANDLERS ================= */
     async handlePrivateMessage(message) {
         try {
-            // ✅ Check auth
             const user = await Firebase.getUser(message.author.id);
             if (!user) {
                 return message.channel.send(
@@ -227,7 +224,6 @@ class DiscordBot {
                 ).catch(() => {});
             }
 
-            // ✅ Âm thầm lưu tin nhắn của user vào historyprivate
             Firebase.addPrivateHistory(message.author.id, `user_${Date.now()}`, {
                 role: 'user',
                 content: message.content.slice(0, 500),
@@ -239,8 +235,6 @@ class DiscordBot {
 
             const ai = require('./ai');
             const model = user.preferredModel || 'instant';
-
-            // ✅ Context 'private' → ai.js lưu vào historyprivate thay vì history
             const response = await ai.process(message.author.id, message.content, model, 'private');
 
             await message.channel.send({ content: response }).catch(() => {});
@@ -304,7 +298,6 @@ class DiscordBot {
                     return;
                 }
 
-                // tb: gửi thông báo
                 if (customId.startsWith('tb_modal_')) {
                     const cmd = this.commands.get('tb');
                     if (cmd?.handleModalSubmit) await cmd.handleModalSubmit(interaction);
@@ -367,7 +360,6 @@ class DiscordBot {
                     return;
                 }
 
-                // tb: mở form soạn thông báo
                 if (customId.startsWith('tb_open_')) {
                     if (!Config.isOwner(interaction.user.id)) {
                         return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true });
@@ -377,7 +369,6 @@ class DiscordBot {
                     return;
                 }
 
-                // tb: hủy
                 if (customId.startsWith('tb_cancel_')) {
                     if (!Config.isOwner(interaction.user.id)) {
                         return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true });
