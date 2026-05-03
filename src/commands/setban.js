@@ -3,6 +3,7 @@ const { Timestamp } = require('firebase-admin/firestore');
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
 const Firebase = require('../utils/firebase');
+const { formatVN } = require('../utils/time');
 
 module.exports = {
     name: 'setban',
@@ -65,13 +66,14 @@ module.exports = {
                 isActive: true
             });
 
+            // FIX: formatVN để hiện đúng giờ VN
             const embed = new EmbedBuilder()
                 .setColor(0xFF0000)
                 .setTitle('🚫 ĐÃ BAN')
                 .addFields(
                     { name: '🆔 ID', value: targetId },
                     { name: '⏳ Thời gian', value: display },
-                    { name: '🕒 Hết hạn', value: expiresAt.toLocaleString('vi-VN') },
+                    { name: '🕒 Hết hạn', value: formatVN(expiresAt) },
                     { name: '📝 Lý do', value: reason },
                     { name: '👮 Bởi', value: message.author.tag }
                 )
@@ -87,7 +89,7 @@ module.exports = {
                     .setTitle('🚫 Bạn đã bị ban')
                     .addFields(
                         { name: '⏳ Thời gian', value: display },
-                        { name: '🕒 Hết hạn', value: expiresAt.toLocaleString('vi-VN') },
+                        { name: '🕒 Hết hạn', value: formatVN(expiresAt) },
                         { name: '📝 Lý do', value: reason }
                     )
                     .setDescription(`Gõ \`${Config.PREFIX}appeal\` để kháng cáo nếu bạn cho là oan.`)
