@@ -1,4 +1,3 @@
-const { EmbedBuilder } = require('discord.js');
 const { FieldValue } = require('firebase-admin/firestore');
 const Config = require('../utils/config');
 const Logger = require('../utils/logger');
@@ -29,9 +28,7 @@ module.exports = {
             }
 
             const isBanned = await Firebase.isBanned(userId);
-            if (isBanned) {
-                return message.reply('🚫 Bạn đã bị chặn. Dùng `.appeal` để kháng cáo.');
-            }
+            if (isBanned) return message.reply('🚫 Bạn đã bị chặn. Dùng `.appeal` để kháng cáo.');
 
             if (!args.length) {
                 const reply = await message.reply(`Vui lòng nhập câu hỏi! Ví dụ: \`${Config.PREFIX}ask Chào Lol.AI!\``);
@@ -44,13 +41,8 @@ module.exports = {
 
             message.channel.sendTyping();
 
+            // ai.js sẽ tự lưu Q&A gộp vào history — không cần lưu riêng ở đây nữa
             const response = await AI.ask(userId, question, model);
-
-            await Firebase.addHistory(userId, `user_${Date.now()}`, {
-                role: 'user',
-                content: question.slice(0, 100),
-                model: model
-            });
 
             await Firebase.updateUser(userId, {
                 'stats.totalMessages': FieldValue.increment(1),
