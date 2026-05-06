@@ -11,23 +11,18 @@ class DiscordBot {
     constructor() {
         this.client = new Client({
             intents: [
-                GatewayIntentBits.Guilds,
-                GatewayIntentBits.GuildMessages,
-                GatewayIntentBits.MessageContent,
-                GatewayIntentBits.GuildMembers,
+                GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages,
+                GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers,
                 GatewayIntentBits.DirectMessages
             ],
             partials: ['CHANNEL', 'MESSAGE', 'USER']
         });
-
         this.commands = new Collection();
         this.cooldowns = new Collection();
         this.privateManager = new PrivateChatManager();
-
         this.client.botInstance = this;
         this.client.privateManager = this.privateManager;
         this.client.commands = this.commands;
-
         this.loadCommands();
         this.setupEventHandlers();
     }
@@ -35,10 +30,7 @@ class DiscordBot {
     loadCommands() {
         const commandsPath = path.join(__dirname, 'commands');
         try {
-            if (!fs.existsSync(commandsPath)) {
-                return Logger.error("Thư mục 'commands' không tồn tại!");
-            }
-
+            if (!fs.existsSync(commandsPath)) return Logger.error("Thư mục 'commands' không tồn tại!");
             const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
             for (const file of files) {
                 const cmd = require(path.join(commandsPath, file));
@@ -50,9 +42,7 @@ class DiscordBot {
                 }
             }
             Logger.info(`Tổng cộng: ${this.commands.size} lệnh`);
-        } catch (error) {
-            Logger.error('Lỗi load commands:', error.message);
-        }
+        } catch (error) { Logger.error('Lỗi load commands:', error.message); }
     }
 
     setupEventHandlers() {
@@ -61,16 +51,9 @@ class DiscordBot {
             Logger.success(`Tag: ${this.client.user?.tag || 'Unknown'}`);
             Logger.success(`Servers: ${this.client.guilds.cache.size}`);
             Logger.success(`Prefix: "${Config.PREFIX}"`);
-
             try {
-                await this.client.user.setPresence({
-                    activities: [{ name: `${Config.PREFIX}help`, type: 0 }],
-                    status: 'online'
-                });
-            } catch (err) {
-                Logger.warn('Set presence failed:', err.message);
-            }
-
+                await this.client.user.setPresence({ activities: [{ name: `${Config.PREFIX}help`, type: 0 }], status: 'online' });
+            } catch (err) { Logger.warn('Set presence failed:', err.message); }
             this.privateManager.startCleanup(this.client);
             this.startInactiveCheck();
             this.startSessionAlert();
@@ -80,49 +63,28 @@ class DiscordBot {
         this.client.on(Events.MessageCreate, async (message) => {
             try {
                 if (message.author.bot) return;
-
-                // 1. Private Chat
                 const privateData = this.privateManager.getChat(message.author.id);
                 if (privateData && message.channel.id === privateData.channelId) {
                     this.privateManager.updateActivity(message.author.id);
-                    if (message.content.startsWith(Config.PREFIX)) {
-                        await this.handleCommand(message);
-                    } else {
-                        await this.handlePrivateMessage(message);
-                    }
+                    if (message.content.startsWith(Config.PREFIX)) await this.handleCommand(message);
+                    else await this.handlePrivateMessage(message);
                     return;
                 }
-
-                // 2. DM thường
                 if (message.channel.type === 1 || message.channel.isDMBased()) {
                     if (!message.content.startsWith(Config.PREFIX)) return;
                     await this.handleCommand(message);
                     return;
                 }
-
-                // 3. Guild
                 if (!message.content.startsWith(Config.PREFIX)) return;
                 await this.handleCommand(message);
-
-            } catch (error) {
-                Logger.error('MessageCreate error:', error);
-            }
+            } catch (error) { Logger.error('MessageCreate error:', error); }
         });
 
-        this.client.on(Events.InteractionCreate, async (interaction) => {
-            await this.handleInteraction(interaction);
-        });
-
-        this.client.on(Events.Error, (error) => {
-            Logger.error('Discord client error:', error?.message);
-        });
-
-        this.client.on(Events.Warn, (warning) => {
-            Logger.warn('Discord warning:', warning);
-        });
+        this.client.on(Events.InteractionCreate, async (interaction) => { await this.handleInteraction(interaction); });
+        this.client.on(Events.Error, (error) => { Logger.error('Discord client error:', error?.message); });
+        this.client.on(Events.Warn, (warning) => { Logger.warn('Discord warning:', warning); });
     }
 
-    /* ================= BACKGROUND TASKS ================= */
     startInactiveCheck() {
         setInterval(async () => {
             try {
@@ -131,14 +93,9 @@ class DiscordBot {
                     try {
                         const discordUser = await this.client.users.fetch(user.id);
                         if (discordUser) {
-                            const embed = new EmbedBuilder()
-                                .setColor(0xFFA500)
-                                .setTitle('⏰ Xác nhận hoạt động')
-                                .setDescription(`Bạn đã offline ${Config.INACTIVE_CHECK_DAYS} ngày.\nGõ \`${Config.PREFIX}confirm\` trong **24 giờ** để giữ tài khoản.`)
-                                .setTimestamp();
-
+                            const embed = new EmbedBuilder().setColor(0xFFA500).setTitle('⏰ Xác nhận hoạt động')
+                                .setDescription(`Bạn đã offline ${Config.INACTIVE_CHECK_DAYS} ngày.\nGõ \`${Config.PREFIX}confirm\` trong **24 giờ** để giữ tài khoản.`).setTimestamp();
                             await discordUser.send({ embeds: [embed] }).catch(() => {});
-
                             setTimeout(async () => {
                                 const current = await Firebase.getUser(user.id);
                                 if (current) {
@@ -151,13 +108,9 @@ class DiscordBot {
                                 }
                             }, Config.DELETE_AFTER_DAYS * 86400000);
                         }
-                    } catch (e) {
-                        Logger.error('Inactive check user error:', e);
-                    }
+                    } catch (e) { Logger.error('Inactive check user error:', e); }
                 }
-            } catch (e) {
-                Logger.error('Inactive check failed:', e);
-            }
+            } catch (e) { Logger.error('Inactive check failed:', e); }
         }, 86400000);
     }
 
@@ -165,80 +118,48 @@ class DiscordBot {
         setInterval(async () => {
             try {
                 const users = await Firebase.db.collection('users')
-                    .where('isLoggedIn', '==', true)
-                    .where('isPermanentAdmin', '!=', true)
-                    .get();
-
+                    .where('isLoggedIn', '==', true).where('isPermanentAdmin', '!=', true).get();
                 const now = Date.now();
                 const alertThreshold = now + 86400000;
-
                 for (const doc of users.docs) {
                     const user = doc.data();
                     const expires = user.sessionExpires?.toDate?.();
                     if (!expires) continue;
-
                     if (expires.getTime() <= alertThreshold && expires.getTime() > now && !user.notifiedExpiry) {
                         try {
                             const discordUser = await this.client.users.fetch(doc.id);
                             if (discordUser) {
-                                // FIX: dùng formatVN để hiển thị giờ VN đúng
-                                await discordUser.send(
-                                    `⚠️ Session của bạn sẽ hết hạn vào **${formatVN(expires)}**. Gõ \`${Config.PREFIX}login\` để gia hạn.`
-                                ).catch(() => {});
+                                await discordUser.send(`⚠️ Session của bạn sẽ hết hạn vào **${formatVN(expires)}**. Gõ \`${Config.PREFIX}login\` để gia hạn.`).catch(() => {});
                                 await Firebase.updateUser(doc.id, { notifiedExpiry: true });
                             }
                         } catch (e) {}
                     }
                 }
-            } catch (e) {
-                Logger.error('Session alert error:', e);
-            }
+            } catch (e) { Logger.error('Session alert error:', e); }
         }, 3600000);
     }
 
     startQuotaReset() {
-        // FIX: dùng getNextResetTime để tính đúng, log bằng formatVN
         const nextReset = getNextResetTime(Config.RESET_HOUR_UTC);
         const msUntilReset = nextReset.getTime() - Date.now();
-
         setTimeout(() => {
             Firebase.resetAllQuotas();
             setInterval(() => Firebase.resetAllQuotas(), 86400000);
         }, msUntilReset);
-
         Logger.info(`⏰ Quota reset lúc ${formatVN(nextReset)} (giờ VN)`);
     }
 
-    /* ================= HANDLERS ================= */
     async handlePrivateMessage(message) {
         try {
             const user = await Firebase.getUser(message.author.id);
-            if (!user) {
-                return message.channel.send(
-                    `❌ Bạn chưa đăng ký! Gõ \`${Config.PREFIX}signup\` để đăng ký.`
-                ).catch(() => {});
-            }
-            if (!user.isLoggedIn && !Config.isOwner(message.author.id)) {
-                return message.channel.send(
-                    `🔒 Bạn chưa đăng nhập! Gõ \`${Config.PREFIX}login\` để đăng nhập.`
-                ).catch(() => {});
-            }
-
-            Firebase.addPrivateHistory(message.author.id, `user_${Date.now()}`, {
-                role: 'user',
-                content: message.content.slice(0, 500),
-                model: user.preferredModel || 'instant',
-                timestamp_ms: Date.now()
-            }).catch(e => Logger.error('addPrivateHistory (user msg) error:', e.message));
-
+            if (!user) return message.channel.send(`❌ Bạn chưa đăng ký! Gõ \`${Config.PREFIX}signup\`.`).catch(() => {});
+            if (!user.isLoggedIn && !Config.isOwner(message.author.id)) return message.channel.send(`🔒 Bạn chưa đăng nhập! Gõ \`${Config.PREFIX}login\`.`).catch(() => {});
             message.channel.sendTyping().catch(() => {});
-
             const ai = require('./ai');
             const model = user.preferredModel || 'instant';
+            // ai.js tự lưu Q&A gộp vào historyprivate
             const response = await ai.process(message.author.id, message.content, model, 'private');
-
             await message.channel.send({ content: response }).catch(() => {});
-
         } catch (error) {
             Logger.error('Private message error:', error);
             await message.channel.send('❌ Lỗi. Thử lại!').catch(() => {});
@@ -248,13 +169,10 @@ class DiscordBot {
     async handleCommand(message) {
         const args = message.content.slice(Config.PREFIX.length).trim().split(/ +/);
         const commandName = args.shift().toLowerCase();
-
         const command = this.commands.get(commandName);
         if (!command) return;
 
-        if (!this.cooldowns.has(command.name)) {
-            this.cooldowns.set(command.name, new Collection());
-        }
+        if (!this.cooldowns.has(command.name)) this.cooldowns.set(command.name, new Collection());
         const timestamps = this.cooldowns.get(command.name);
         const cooldownAmount = (command.cooldown || Config.INSTANT_COOLDOWN || 3) * 1000;
 
@@ -271,10 +189,7 @@ class DiscordBot {
         setTimeout(() => timestamps.delete(message.author.id), cooldownAmount);
 
         try {
-            await command.execute(message, args, {
-                bot: this,
-                privateManager: this.privateManager
-            });
+            await command.execute(message, args, { bot: this, privateManager: this.privateManager });
         } catch (error) {
             Logger.error(`Command ${commandName} error:`, error);
             await message.reply('❌ Có lỗi. Thử lại!').catch(() => {});
@@ -284,115 +199,35 @@ class DiscordBot {
     async handleInteraction(interaction) {
         try {
             if (interaction.isModalSubmit()) {
-                const customId = interaction.customId;
-
-                if (customId.startsWith('appeal_modal_') || customId.startsWith('appeal_deny_reason_')) {
-                    const cmd = this.commands.get('appeal');
-                    if (cmd?.handleModalSubmit) await cmd.handleModalSubmit(interaction);
-                    return;
-                }
-
-                if (customId.startsWith('feedback_modal_') || customId.startsWith('feedback_reply_')) {
-                    const cmd = this.commands.get('feedbacks');
-                    if (cmd?.handleModalSubmit) await cmd.handleModalSubmit(interaction);
-                    return;
-                }
-
-                if (customId.startsWith('tb_modal_')) {
-                    const cmd = this.commands.get('tb');
-                    if (cmd?.handleModalSubmit) await cmd.handleModalSubmit(interaction);
-                    return;
-                }
-
+                const id = interaction.customId;
+                if (id.startsWith('appeal_modal_') || id.startsWith('appeal_deny_reason_')) { const c = this.commands.get('appeal'); if (c?.handleModalSubmit) await c.handleModalSubmit(interaction); return; }
+                if (id.startsWith('feedback_modal_') || id.startsWith('feedback_reply_')) { const c = this.commands.get('feedbacks'); if (c?.handleModalSubmit) await c.handleModalSubmit(interaction); return; }
+                if (id.startsWith('tb_modal_')) { const c = this.commands.get('tb'); if (c?.handleModalSubmit) await c.handleModalSubmit(interaction); return; }
                 return;
             }
-
             if (interaction.isButton()) {
-                const customId = interaction.customId;
-
-                if (customId.startsWith('appeal_open_')) {
-                    const requestUserId = customId.replace('appeal_open_', '');
-                    if (interaction.user.id !== requestUserId) {
-                        return interaction.reply({ content: '❌ Đây không phải form của bạn!', ephemeral: true });
-                    }
-                    const cmd = this.commands.get('appeal');
-                    if (cmd?.handleOpenButton) await cmd.handleOpenButton(interaction);
-                    return;
+                const id = interaction.customId;
+                if (id.startsWith('appeal_open_')) {
+                    const uid = id.replace('appeal_open_', '');
+                    if (interaction.user.id !== uid) return interaction.reply({ content: '❌ Đây không phải form của bạn!', ephemeral: true });
+                    const c = this.commands.get('appeal'); if (c?.handleOpenButton) await c.handleOpenButton(interaction); return;
                 }
-
-                if (customId.startsWith('feedback_open_')) {
-                    const requestUserId = customId.replace('feedback_open_', '');
-                    if (interaction.user.id !== requestUserId) {
-                        return interaction.reply({ content: '❌ Đây không phải form của bạn!', ephemeral: true });
-                    }
-                    const cmd = this.commands.get('feedbacks');
-                    if (cmd?.handleOpenButton) await cmd.handleOpenButton(interaction);
-                    return;
+                if (id.startsWith('feedback_open_')) {
+                    const uid = id.replace('feedback_open_', '');
+                    if (interaction.user.id !== uid) return interaction.reply({ content: '❌ Đây không phải form của bạn!', ephemeral: true });
+                    const c = this.commands.get('feedbacks'); if (c?.handleOpenButton) await c.handleOpenButton(interaction); return;
                 }
-
-                if (customId.startsWith('approve_appeal_')) {
-                    if (!Config.isOwner(interaction.user.id)) {
-                        return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true });
-                    }
-                    const targetUserId = customId.replace('approve_appeal_', '');
-                    const cmd = this.commands.get('appeal');
-                    if (cmd?.handleApprove) await cmd.handleApprove(interaction, targetUserId);
-                    return;
-                }
-
-                if (customId.startsWith('deny_appeal_')) {
-                    if (!Config.isOwner(interaction.user.id)) {
-                        return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true });
-                    }
-                    const targetUserId = customId.replace('deny_appeal_', '');
-                    const cmd = this.commands.get('appeal');
-                    if (cmd?.handleDeny) await cmd.handleDeny(interaction, targetUserId);
-                    return;
-                }
-
-                if (customId.startsWith('feedback_reply_btn_')) {
-                    if (!Config.isOwner(interaction.user.id)) {
-                        return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true });
-                    }
-                    const targetUserId = customId.replace('feedback_reply_btn_', '');
-                    const cmd = this.commands.get('feedbacks');
-                    if (cmd?.handleReplyButton) await cmd.handleReplyButton(interaction, targetUserId);
-                    return;
-                }
-
-                if (customId.startsWith('tb_open_')) {
-                    if (!Config.isOwner(interaction.user.id)) {
-                        return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true });
-                    }
-                    const cmd = this.commands.get('tb');
-                    if (cmd?.handleOpenButton) await cmd.handleOpenButton(interaction);
-                    return;
-                }
-
-                if (customId.startsWith('tb_cancel_')) {
-                    if (!Config.isOwner(interaction.user.id)) {
-                        return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true });
-                    }
-                    const cmd = this.commands.get('tb');
-                    if (cmd?.handleCancelButton) await cmd.handleCancelButton(interaction);
-                    return;
-                }
-
+                if (id.startsWith('approve_appeal_')) { if (!Config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true }); const c = this.commands.get('appeal'); if (c?.handleApprove) await c.handleApprove(interaction, id.replace('approve_appeal_', '')); return; }
+                if (id.startsWith('deny_appeal_')) { if (!Config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true }); const c = this.commands.get('appeal'); if (c?.handleDeny) await c.handleDeny(interaction, id.replace('deny_appeal_', '')); return; }
+                if (id.startsWith('feedback_reply_btn_')) { if (!Config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true }); const c = this.commands.get('feedbacks'); if (c?.handleReplyButton) await c.handleReplyButton(interaction, id.replace('feedback_reply_btn_', '')); return; }
+                if (id.startsWith('tb_open_')) { if (!Config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true }); const c = this.commands.get('tb'); if (c?.handleOpenButton) await c.handleOpenButton(interaction); return; }
+                if (id.startsWith('tb_cancel_')) { if (!Config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Chỉ admin!', ephemeral: true }); const c = this.commands.get('tb'); if (c?.handleCancelButton) await c.handleCancelButton(interaction); return; }
                 return;
             }
-
-            if (interaction.isChatInputCommand()) {
-                const cmd = this.commands.get(interaction.commandName);
-                if (cmd) await cmd.execute(interaction);
-            }
-
+            if (interaction.isChatInputCommand()) { const c = this.commands.get(interaction.commandName); if (c) await c.execute(interaction); }
         } catch (error) {
             Logger.error('Interaction error:', error);
-            try {
-                if (!interaction.replied && !interaction.deferred) {
-                    await interaction.reply({ content: '❌ Có lỗi xảy ra.', ephemeral: true });
-                }
-            } catch (e) {}
+            try { if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: '❌ Có lỗi xảy ra.', ephemeral: true }); } catch (e) {}
         }
     }
 
@@ -402,10 +237,7 @@ class DiscordBot {
             await this.client.login(Config.DISCORD_TOKEN);
             Logger.success('Bot logged in');
             return this.client;
-        } catch (error) {
-            Logger.error('Login error:', error.message);
-            throw error;
-        }
+        } catch (error) { Logger.error('Login error:', error.message); throw error; }
     }
 
     async stop() {
