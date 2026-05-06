@@ -24,7 +24,7 @@ module.exports = {
                 },
                 {
                     name: '💬 Chat',
-                    value: `\`${Config.PREFIX}privatechat\` - Chat riêng\n\`${Config.PREFIX}endprv\` - Đóng chat riêng\n\`${Config.PREFIX}clear\` - Xóa lịch sử`
+                    value: `\`${Config.PREFIX}privatechat\` - Chat riêng\n\`${Config.PREFIX}endprv\` - Đóng chat riêng\n\`${Config.PREFIX}clear\` - Xóa lịch sử\n\`${Config.PREFIX}history\` - Xem lịch sử (DM)`
                 },
                 {
                     name: '⚙️ Khác',
@@ -36,7 +36,7 @@ module.exports = {
         if (isAdmin) {
             embed.addFields({
                 name: '👑 Admin',
-                value: `\`${Config.PREFIX}setban\` - Ban user\n\`${Config.PREFIX}unban\` - Gỡ ban\n\`${Config.PREFIX}tb\` - Gửi thông báo server`
+                value: `\`${Config.PREFIX}setban\` - Ban user\n\`${Config.PREFIX}unban\` - Gỡ ban\n\`${Config.PREFIX}tb\` - Gửi thông báo server\n\`${Config.PREFIX}history <userId>\` - Xem lịch sử user`
             });
         }
 
