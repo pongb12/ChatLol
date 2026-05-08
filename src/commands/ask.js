@@ -1,8 +1,8 @@
 const { FieldValue } = require('firebase-admin/firestore');
-const Config = require('../utils/config');
-const Logger = require('../utils/logger');
+const Config   = require('../utils/config');
+const Logger   = require('../utils/logger');
 const Firebase = require('../utils/firebase');
-const AI = require('../ai');
+const AI       = require('../ai');
 
 module.exports = {
     name: 'ask',
@@ -10,39 +10,28 @@ module.exports = {
     usage: '.ask <câu hỏi>',
     cooldown: 5,
 
-    async execute(message, args) {
-        const userId = message.author.id;
+    async execute(message, args, context) {
+        const userId   = message.author.id;
+        const serverId = context?.serverId || null; // null nếu DM
 
         try {
+            // Auth: luôn check từ global
             const user = await Firebase.getUser(userId);
-            if (!user) {
-                const reply = await message.reply(`❌ Bạn chưa đăng ký!\n📩 Vui lòng **DM** bot gõ \`${Config.PREFIX}signup\` để đăng ký.`);
-                setTimeout(() => reply.delete().catch(() => {}), 10000);
-                return;
-            }
+            if (!user) return message.reply(`❌ Chưa đăng ký! Gõ \`${Config.PREFIX}signup\`.`);
+            if (!user.isLoggedIn && !Config.isOwner(userId)) return message.reply(`🔒 Chưa đăng nhập! Gõ \`${Config.PREFIX}login\`.`);
+            if (await Firebase.isBanned(userId)) return message.reply('🚫 Bạn đã bị chặn. Dùng `.appeal`.');
 
-            if (!user.isLoggedIn && !Config.isOwner(userId)) {
-                const reply = await message.reply(`🔒 Bạn chưa đăng nhập!\n📩 DM bot gõ \`${Config.PREFIX}login\`.`);
-                setTimeout(() => reply.delete().catch(() => {}), 10000);
-                return;
-            }
+            if (!args.length) return message.reply(`Ví dụ: \`${Config.PREFIX}ask Chào Lol.AI!\``);
 
-            const isBanned = await Firebase.isBanned(userId);
-            if (isBanned) return message.reply('🚫 Bạn đã bị chặn. Dùng `.appeal` để kháng cáo.');
-
-            if (!args.length) {
-                const reply = await message.reply(`Vui lòng nhập câu hỏi! Ví dụ: \`${Config.PREFIX}ask Chào Lol.AI!\``);
-                setTimeout(() => reply.delete().catch(() => {}), 5000);
-                return;
-            }
+            // Nếu trong guild: đảm bảo server user đã được copy từ global
+            if (serverId) await Firebase.ensureServerUser(serverId, userId).catch(() => {});
 
             const question = args.join(' ');
-            const model = user.preferredModel || 'instant';
+            const model    = user.preferredModel || 'instant';
 
-            message.channel.sendTyping();
+            message.channel.sendTyping().catch(() => {});
 
-            // ai.js sẽ tự lưu Q&A gộp vào history — không cần lưu riêng ở đây nữa
-            const response = await AI.ask(userId, question, model);
+            const response = await AI.ask(userId, question, model, serverId);
 
             await Firebase.updateUser(userId, {
                 'stats.totalMessages': FieldValue.increment(1),
@@ -56,10 +45,10 @@ module.exports = {
                 await message.reply(response);
             }
 
-            Logger.info(`Ask [${model}] by ${message.author.tag}`);
+            Logger.info(`Ask [${model}]${serverId ? `[${serverId.slice(-4)}]` : '[DM]'} by ${message.author.tag}`);
 
-        } catch (error) {
-            Logger.error('Ask error:', error);
+        } catch (e) {
+            Logger.error('Ask error:', e);
             message.reply('❌ Có lỗi. Thử lại!');
         }
     }
